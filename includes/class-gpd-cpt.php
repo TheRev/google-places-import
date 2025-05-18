@@ -15,6 +15,7 @@ class GPD_CPT {
         if ( ! $instance ) {
             $instance = new self();
             add_action( 'init', [ $instance, 'register_post_type_and_taxonomies' ], 0 );
+            add_filter( 'content_save_pre', [ $instance, 'allow_html_for_business_cpt' ] );
         }
         return $instance;
     }
@@ -66,5 +67,21 @@ class GPD_CPT {
             'show_admin_column' => true,
             'rewrite'           => [ 'slug' => 'region' ],
         ] );
+    }
+
+    /**
+     * Allow HTML tags, specifically <span> with class attributes, for the "Businesses" CPT.
+     *
+     * @param string $content The content being saved.
+     * @return string The sanitized or unfiltered content.
+     */
+    public function allow_html_for_business_cpt( $content ) {
+        // Check if the current post is of type 'business'
+        if ( get_post_type() === 'business' ) {
+            remove_filter( 'content_save_pre', 'wp_filter_post_kses' );
+            remove_filter( 'content_filtered_save_pre', 'wp_filter_post_kses' );
+        }
+
+        return $content;
     }
 }
