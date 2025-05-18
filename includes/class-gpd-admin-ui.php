@@ -28,9 +28,9 @@ class GPD_Admin_UI {
         add_action( 'admin_menu', [ $this, 'add_admin_pages' ] );
         add_action( 'admin_post_gpd_import', [ $this, 'handle_import' ] );
 
-        // Add Destination column to Business list
-        add_filter( 'manage_business_posts_columns', [ $this, 'add_destination_column' ] );
-        add_action( 'manage_business_posts_custom_column', [ $this, 'render_destination_column' ], 10, 2 );
+        // Remove the following two lines to avoid duplicate "Destination" column
+        // add_filter( 'manage_business_posts_columns', [ $this, 'add_destination_column' ] );
+        // add_action( 'manage_business_posts_custom_column', [ $this, 'render_destination_column' ], 10, 2 );
     }
 
     public function add_admin_pages() {
@@ -52,6 +52,8 @@ class GPD_Admin_UI {
         );
     }
 
+    // Remove these two methods entirely to prevent duplicate columns
+    /*
     public function add_destination_column( $columns ) {
         $columns['destination'] = __( 'Destination', 'google-places-directory' );
         return $columns;
@@ -67,6 +69,7 @@ class GPD_Admin_UI {
             }
         }
     }
+    */
 
     public function render_import_page() {
         $radius_options   = [ 6, 15, 25, 50 ];
@@ -86,6 +89,7 @@ class GPD_Admin_UI {
             'fields'      => 'ids',
         ]);
         $imported_ids = [];
+
         foreach ( $imported_posts as $pid ) {
             $imported_ids[] = get_post_meta( $pid, '_gpd_place_id', true );
         }
