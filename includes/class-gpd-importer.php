@@ -159,10 +159,10 @@ class GPD_Importer {
      * Fetch full Place Details for accurate address_components
      */
     private function get_place_details( $place_id ) {
-        // Headers for authentication and field selection
+        // Headers for authentication and field selection - Added photos to the field mask
         $headers = [
             'X-Goog-Api-Key'   => $this->api_key,
-            'X-Goog-FieldMask' => 'id,displayName,formattedAddress,addressComponents,types,websiteUri,internationalPhoneNumber,googleMapsUri,rating,businessStatus,location'
+            'X-Goog-FieldMask' => 'id,displayName,formattedAddress,addressComponents,types,websiteUri,internationalPhoneNumber,googleMapsUri,rating,businessStatus,location,photos'
         ];
 
         // Endpoint format is https://places.googleapis.com/v1/places/{place_id}
@@ -206,6 +206,7 @@ class GPD_Importer {
             'url' => $details['googleMapsUri'] ?? '',
             'website' => $details['websiteUri'] ?? '',
             'international_phone_number' => $details['internationalPhoneNumber'] ?? '',
+            'photos' => $details['photos'] ?? [], // Add photos to normalized data
         ];
         
         // Handle address components
@@ -239,6 +240,132 @@ class GPD_Importer {
             ];
         }
         return $normalized;
+    }
+
+    /**
+     * Import a photo from Google Places API to WordPress Media Library
+     *
+     * @param string $photo_reference Photo reference from Places API
+     * @param int    $post_id         Post ID to attach the photo to
+     * @param string $business_name   Business name for the photo title
+     * @param int    $photo_index     Index number for the photo (to create unique filenames)
+     * @return int|false              Attachment ID if successful, false otherwise
+     */
+    private function import_photo($photo_reference, $post_id, $business_name, $photo_index = 1) {
+        if (empty($photo_reference) || empty($post_id)) {
+            return false;
+        }
+
+        // Build the photo URL with the reference path
+        $url = "https://places.googleapis.com/v1/{$photo_reference}/media";
+        
+        // Add size parameters - adjust these values based on your needs
+        $params = [
+            'maxHeightPx' => 800,  // Standard height for featured images
+            'maxWidthPx'  => 1200, // Standard width for featured images
+        ];
+        
+        $url = add_query_arg($params, $url);
+        
+        // Set up headers for the request
+        $headers = [
+            'X-Goog-Api-Key' => $this->api_key,
+        ];
+        
+        // Make the request to get the photo
+        $response = wp_remote_get($url, [
+            'headers' => $headers,
+            'timeout' => 30
+        ]);
+        
+        // Check for errors
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            if (is_wp_error($response)) {
+                error_log('Failed to download Places photo: ' . $response->get_error_message());
+            } else {
+                error_log('Failed to download Places photo. HTTP Status: ' . wp_remote_retrieve_response_code($response));
+            }
+            return false;
+        }
+        
+        // Get the image data
+        $image_data = wp_remote_retrieve_body($response);
+        if (empty($image_data)) {
+            error_log('Empty image data received from Places API');
+            return false;
+        }
+        
+        // Get the content type to determine file extension
+        $content_type = wp_remote_retrieve_header($response, 'content-type');
+        
+        // Determine file extension based on content type
+        $extension = '';
+        switch ($content_type) {
+            case 'image/jpeg':
+                $extension = 'jpg';
+                break;
+            case 'image/png':
+                $extension = 'png';
+                break;
+            case 'image/webp':
+                $extension = 'webp';
+                break;
+            default:
+                $extension = 'jpg'; // Default to jpg
+        }
+        
+        // Create a unique filename
+        $sanitized_name = sanitize_title($business_name);
+        if (strlen($sanitized_name) > 40) {
+            $sanitized_name = substr($sanitized_name, 0, 40);
+        }
+        $filename = $sanitized_name . '-photo-' . $photo_index . '-' . substr(md5($photo_reference), 0, 8) . '.' . $extension;
+        
+        // Save temp file
+        $upload_dir = wp_upload_dir();
+        $temp_file = $upload_dir['path'] . '/' . $filename;
+        file_put_contents($temp_file, $image_data);
+        
+        // Check the filetype
+        $filetype = wp_check_filetype($filename, null);
+        
+        // Prepare attachment data
+        $attachment = [
+            'post_mime_type' => $filetype['type'],
+            'post_title'     => sanitize_text_field($business_name . ' - Google Places Photo ' . $photo_index),
+            'post_content'   => sprintf(
+                __('Photo of %1$s provided by Google Places API. Photo attribution: Google Maps. Reference: %2$s', 'google-places-directory'),
+                $business_name,
+                $photo_reference
+            ),
+            'post_status'    => 'inherit'
+        ];
+        
+        // Insert the attachment
+        $attach_id = wp_insert_attachment($attachment, $temp_file, $post_id);
+        
+        if (!is_wp_error($attach_id)) {
+            // Required for WordPress to create image thumbnails
+            require_once(ABSPATH . 'wp-admin/includes/image.php');
+            
+            // Generate metadata for the attachment
+            $attach_data = wp_generate_attachment_metadata($attach_id, $temp_file);
+            wp_update_attachment_metadata($attach_id, $attach_data);
+            
+            // Store the photo reference as attachment meta
+            update_post_meta($attach_id, '_gpd_photo_reference', $photo_reference);
+            update_post_meta($attach_id, '_gpd_photo_attribution', 'Google Places API');
+            
+            // Clean up the temporary file
+            @unlink($temp_file);
+            
+            return $attach_id;
+        } else {
+            // Clean up on error
+            @unlink($temp_file);
+            error_log('Failed to insert attachment: ' . $attach_id->get_error_message());
+            return false;
+        }
     }
 
     /**
@@ -349,6 +476,70 @@ class GPD_Importer {
             if ( ! is_wp_error( $current_post_id ) && $current_post_id > 0 && $locality ) {
                 wp_set_object_terms( $current_post_id, $locality, 'destination', false );
                 clean_object_term_cache( $current_post_id, 'destination' );
+            }
+
+            // 10. Process Photos - NEW SECTION
+            if (!is_wp_error($current_post_id) && $current_post_id > 0) {
+                // Get photo limit from settings
+                $photo_limit = (int) get_option('gpd_photo_limit', 3);
+                
+                // Only process photos if limit is greater than 0
+                if ($photo_limit > 0 && !empty($details['photos'])) {
+                    // Store the array of photo references
+                    $photos_data = $details['photos'];
+                    $featured_image_id = 0;
+                    
+                    // Store references for future use
+                    $photo_refs = [];
+                    
+                    // Process up to the limit
+                    $count = 0;
+                    foreach ($photos_data as $photo_data) {
+                        if ($count >= $photo_limit) {
+                            break;
+                        }
+                        
+                        if (isset($photo_data['name'])) {
+                            $photo_refs[] = $photo_data['name'];
+                            $photo_ref = $photo_data['name'];
+                            
+                            // Check if we already imported this photo
+                            $existing_photo = get_posts([
+                                'post_type' => 'attachment',
+                                'posts_per_page' => 1,
+                                'meta_key' => '_gpd_photo_reference',
+                                'meta_value' => $photo_ref,
+                                'fields' => 'ids',
+                            ]);
+                            
+                            if (!empty($existing_photo)) {
+                                // Photo already exists, use this ID
+                                $attach_id = $existing_photo[0];
+                            } else {
+                                // Import the photo
+                                $attach_id = $this->import_photo($photo_ref, $current_post_id, $name, $count + 1);
+                            }
+                            
+                            // Set the first photo as featured image
+                            if ($attach_id && $count === 0) {
+                                set_post_thumbnail($current_post_id, $attach_id);
+                                $featured_image_id = $attach_id;
+                            }
+                            
+                            $count++;
+                        }
+                    }
+                    
+                    // Store photo references as post meta
+                    if (!empty($photo_refs)) {
+                        update_post_meta($current_post_id, '_gpd_photo_references', $photo_refs);
+                    }
+                    
+                    // Store featured image reference
+                    if ($featured_image_id) {
+                        update_post_meta($current_post_id, '_gpd_featured_photo_id', $featured_image_id);
+                    }
+                }
             }
 
             // Action hook
