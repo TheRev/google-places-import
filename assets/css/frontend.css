@@ -1,0 +1,42 @@
+// Update the register_styles method in the GPD_Shortcodes class
+
+public function register_styles() {
+    // Register CSS
+    wp_register_style(
+        'gpd-frontend', 
+        plugin_dir_url( dirname( __FILE__ ) ) . 'assets/css/frontend.css',
+        array(),
+        GPD_VERSION
+    );
+    
+    // Register JS for slider functionality
+    wp_register_script(
+        'gpd-frontend',
+        plugin_dir_url( dirname( __FILE__ ) ) . 'assets/js/frontend.js',
+        array(),
+        GPD_VERSION,
+        true
+    );
+}
+
+// Then update the photos_shortcode method to enqueue the script when needed
+
+public function photos_shortcode( $atts ) {
+    // Existing code...
+    
+    // Begin output
+    $output = '<div class="gpd-photos gpd-layout-' . esc_attr( $atts['layout'] ) . '">';
+    
+    // Generate gallery based on layout type
+    switch ( $atts['layout'] ) {
+        case 'slider':
+            $output .= $this->generate_slider( $attachments, $atts['size'] );
+            // Enqueue slider JS
+            wp_enqueue_script( 'gpd-frontend' );
+            break;
+            
+        // Other cases...
+    }
+    
+    // Rest of the existing code...
+}
