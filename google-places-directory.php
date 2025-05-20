@@ -25,8 +25,7 @@ require_once GPD_PLUGIN_DIR . 'includes/class-gpd-settings.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-importer.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-admin-ui.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-docs.php';
+require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-manager.php';
 
 // Initialize the plugin
 function gpd_init() {
@@ -45,8 +44,8 @@ function gpd_init() {
     // Load shortcodes
     GPD_Shortcodes::instance();
     
-    // Load documentation pages
-    GPD_Docs::instance();
+    // Load photo manager
+    GPD_Photo_Manager::instance();
     
     // Load text domain
     load_plugin_textdomain( 'google-places-directory', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
