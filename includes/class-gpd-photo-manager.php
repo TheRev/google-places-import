@@ -485,8 +485,8 @@ public function ajax_refresh_photos() {
         $photo_references[] = $photo_reference;
         
         // Download and attach the photo
-        $attachment_id = $this->download_and_attach_photo($photo_reference, $post_id, $photo_reference);
-        
+            $attachment_id = $this->download_and_attach_photo($photo_reference, $post_id, $photo_reference);
+
         if ($attachment_id) {
             $photos_added++;
             $photo_results[] = array(
@@ -1091,6 +1091,11 @@ public function ajax_refresh_photos() {
 
 /**
  * Download and attach a photo to a business
+ *
+ * @param string $photo_url URL of the photo
+ * @param int $post_id Post ID to attach to
+ * @param string $photo_reference Photo reference ID
+ * @return int|bool Attachment ID on success, false on failure
  */
 private function download_and_attach_photo($photo_url, $post_id, $photo_reference) {
     // Check if we already have this photo
@@ -1118,26 +1123,24 @@ private function download_and_attach_photo($photo_url, $post_id, $photo_referenc
     require_once(ABSPATH . 'wp-admin/includes/file.php');
     require_once(ABSPATH . 'wp-admin/includes/media.php');
     
-    // In Places API v1, photo references are full resource names, 
-    // not just IDs as in the legacy API.
-    // The URL construction needs to use proper headers and paths
-    
     $api_key = get_option('gpd_api_key');
     
-    // Use WordPress HTTP API with proper headers
-    $response = wp_remote_get(
-        "https://places.googleapis.com/v1/places/" . urlencode($photo_reference) . "/media?maxHeightPx=1200&maxWidthPx=1200&key=" . urlencode($api_key),
-        array(
-            'timeout' => 30,
-            'headers' => array(
-                'Content-Type' => 'application/json',
-                'X-Goog-Api-Key' => $api_key,
-            ),
+    // For Places API v1, the correct format is to request from the media endpoint
+    $url = 'https://places.googleapis.com/v1/' . $photo_reference . '/media?key=' . $api_key . '&maxHeightPx=1200&maxWidthPx=1200';
+    
+    // Make the request with proper headers
+    $response = wp_remote_get($url, array(
+        'timeout' => 30,
+        'headers' => array(
+            // IMPORTANT: The "Accept" header for binary data
+            'Accept' => 'image/*',
+            'X-Goog-Api-Key' => $api_key,
+            'X-Goog-FieldMask' => 'name'
         )
-    );
+    ));
     
     if (is_wp_error($response)) {
-        error_log('Google Places Directory: API request failed - ' . $response->get_error_message());
+        error_log('Google Places Directory: Failed to download photo - ' . $response->get_error_message());
         return false;
     }
     
@@ -1147,31 +1150,25 @@ private function download_and_attach_photo($photo_url, $post_id, $photo_referenc
         return false;
     }
     
-    // Get the image content directly from the API response
+    // Get the image data
     $image_data = wp_remote_retrieve_body($response);
     
-    if (empty($image_data)) {
-        error_log('Google Places Directory: Empty image data received');
+    // Check if downloaded file is valid
+    if (empty($image_data) || strlen($image_data) < 100) { 
+        error_log('Google Places Directory: Invalid image file downloaded - too small or empty');
         return false;
     }
     
     // Generate a unique filename
     $filename = sanitize_file_name($business_name . '-' . substr(md5($photo_reference), 0, 8) . '.jpg');
     
-    // Create a temporary file 
+    // Create a temporary file
     $upload_dir = wp_upload_dir();
     $tmp_file = $upload_dir['basedir'] . '/gpd-temp-' . md5($filename) . '.jpg';
     
     // Write image data to temporary file
     if (file_put_contents($tmp_file, $image_data) === false) {
         error_log('Google Places Directory: Failed to write temporary image file');
-        return false;
-    }
-    
-    // Check if file is valid image
-    if (filesize($tmp_file) < 100) {
-        @unlink($tmp_file);
-        error_log('Google Places Directory: Invalid image file - too small');
         return false;
     }
     
