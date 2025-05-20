@@ -30,6 +30,309 @@ class GPD_Admin_UI {
         add_action( 'admin_menu', [ $this, 'add_admin_pages' ] );
         add_action( 'admin_post_gpd_import', [ $this, 'handle_import' ] );
         add_action( 'admin_notices', [ $this, 'display_import_notices' ] );
+        
+        // Add column to business post type admin list
+        add_filter('manage_business_posts_columns', array($this, 'add_photo_count_column'));
+        add_action('manage_business_posts_custom_column', array($this, 'render_photo_count_column'), 10, 2);
+        
+        // Make the column sortable
+        add_filter('manage_edit-business_sortable_columns', array($this, 'make_photo_count_sortable'));
+        add_action('pre_get_posts', array($this, 'sort_by_photo_count'));
+        
+        // Add filter for photo status
+        add_action('restrict_manage_posts', array($this, 'add_photo_filter'), 10, 2);
+        add_filter('parse_query', array($this, 'filter_by_photo_status'));
+        
+        // Add admin styles
+        add_action('admin_head', array($this, 'add_admin_styles'));
+    }
+
+    /**
+     * Add a photos column to the business post type admin list
+     *
+     * @param array $columns The existing columns
+     * @return array Modified columns
+     */
+    public function add_photo_count_column($columns) {
+        $new_columns = array();
+        
+        // Insert the photos column before the date column
+        foreach ($columns as $key => $label) {
+            if ($key === 'date') {
+                $new_columns['photos'] = __('Photos', 'google-places-directory');
+            }
+            $new_columns[$key] = $label;
+        }
+        
+        // If there's no date column, just add it at the end
+        if (!isset($columns['date'])) {
+            $new_columns['photos'] = __('Photos', 'google-places-directory');
+        }
+        
+        return $new_columns;
+    }
+
+    /**
+     * Render the photo count column content
+     *
+     * @param string $column_name The column name
+     * @param int $post_id The post ID
+     */
+    public function render_photo_count_column($column_name, $post_id) {
+        if ($column_name !== 'photos') {
+            return;
+        }
+        
+        $photo_refs = get_post_meta($post_id, '_gpd_photo_references', true);
+        $count = is_array($photo_refs) ? count($photo_refs) : 0;
+        
+        if ($count === 0) {
+            echo '<span class="gpd-no-photos">' . esc_html__('0', 'google-places-directory') . '</span>';
+            echo ' <a href="' . esc_url(admin_url('post.php?post=' . $post_id . '&action=edit')) . '#gpd-photos" class="gpd-add-photos-link">' . 
+                esc_html__('Add Photos', 'google-places-directory') . '</a>';
+        } else {
+            $featured = has_post_thumbnail($post_id) ? '<span class="dashicons dashicons-star-filled" title="' . esc_attr__('Has Featured Image', 'google-places-directory') . '"></span>' : '';
+            
+            echo '<div class="gpd-photos-count">';
+            echo '<span class="gpd-count">' . esc_html($count) . '</span> ' . $featured;
+            
+            // Add a thumbnail preview of the first photo if we have a featured image
+            if (has_post_thumbnail($post_id)) {
+                $thumb_id = get_post_thumbnail_id($post_id);
+                $thumb_url = wp_get_attachment_image_src($thumb_id, 'thumbnail');
+                if ($thumb_url) {
+                    echo '<div class="gpd-photo-preview-container">';
+                    echo '<img class="gpd-photo-preview" src="' . esc_url($thumb_url[0]) . '" alt="' . esc_attr__('Photo Preview', 'google-places-directory') . '">';
+                    echo '</div>';
+                }
+            }
+            
+            echo '</div>';
+        }
+    }
+
+    /**
+     * Make the photo count column sortable
+     *
+     * @param array $columns The sortable columns
+     * @return array Modified sortable columns
+     */
+    public function make_photo_count_sortable($columns) {
+        $columns['photos'] = 'photos';
+        return $columns;
+    }
+
+    /**
+     * Handle sorting by photo count
+     *
+     * @param WP_Query $query The WordPress query
+     */
+    public function sort_by_photo_count($query) {
+        if (!is_admin() || !$query->is_main_query()) {
+            return;
+        }
+        
+        $orderby = $query->get('orderby');
+        
+        if ($orderby === 'photos') {
+            $query->set('meta_key', '_gpd_photo_references');
+            $query->set('orderby', 'meta_value');
+            
+            // For proper sorting, we want businesses without photos at the bottom when sorting ascending
+            // and at the top when sorting descending
+            $order = strtoupper($query->get('order'));
+            if ($order === 'ASC') {
+                $query->set('meta_query', array(
+                    'relation' => 'OR',
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'compare' => 'EXISTS',
+                    ),
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'compare' => 'NOT EXISTS',
+                    ),
+                ));
+            } else {
+                $query->set('meta_query', array(
+                    'relation' => 'OR',
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'compare' => 'NOT EXISTS',
+                    ),
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'compare' => 'EXISTS',
+                    ),
+                ));
+            }
+        }
+    }
+
+    /**
+     * Add a dropdown filter for photo status
+     *
+     * @param string $post_type The current post type
+     * @param string $which The position of the filters (top or bottom)
+     */
+    public function add_photo_filter($post_type, $which) {
+        if ($post_type !== 'business' || $which !== 'top') {
+            return;
+        }
+        
+        $photo_status = isset($_GET['photo_status']) ? $_GET['photo_status'] : '';
+        ?>
+        <select name="photo_status" id="filter-by-photo-status">
+            <option value=""><?php _e('All Photos', 'google-places-directory'); ?></option>
+            <option value="with" <?php selected($photo_status, 'with'); ?>><?php _e('With Photos', 'google-places-directory'); ?></option>
+            <option value="without" <?php selected($photo_status, 'without'); ?>><?php _e('Without Photos', 'google-places-directory'); ?></option>
+            <option value="no-featured" <?php selected($photo_status, 'no-featured'); ?>><?php _e('Missing Featured Image', 'google-places-directory'); ?></option>
+        </select>
+        <?php
+    }
+
+    /**
+     * Filter businesses by photo status
+     *
+     * @param WP_Query $query The WordPress query
+     */
+    public function filter_by_photo_status($query) {
+        global $pagenow;
+        
+        if (!is_admin() || $pagenow !== 'edit.php' || 
+            !isset($_GET['post_type']) || $_GET['post_type'] !== 'business' || 
+            !isset($_GET['photo_status']) || empty($_GET['photo_status'])) {
+            return;
+        }
+        
+        $photo_status = $_GET['photo_status'];
+        $meta_query = $query->get('meta_query');
+        if (!is_array($meta_query)) {
+            $meta_query = array();
+        }
+        
+        switch ($photo_status) {
+            case 'with':
+                $meta_query[] = array(
+                    'key' => '_gpd_photo_references',
+                    'compare' => 'EXISTS',
+                );
+                break;
+                
+            case 'without':
+                $meta_query[] = array(
+                    'relation' => 'OR',
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'compare' => 'NOT EXISTS',
+                    ),
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'value' => '',
+                        'compare' => '=',
+                    ),
+                    array(
+                        'key' => '_gpd_photo_references',
+                        'value' => 'a:0:{}',
+                        'compare' => '=',
+                    ),
+                );
+                break;
+                
+            case 'no-featured':
+                $meta_query[] = array(
+                    'key' => '_thumbnail_id',
+                    'compare' => 'NOT EXISTS',
+                );
+                break;
+        }
+        
+        if (!empty($meta_query)) {
+            $query->set('meta_query', $meta_query);
+        }
+    }
+
+    /**
+     * Add admin styles for the photo count column
+     */
+    public function add_admin_styles() {
+        $screen = get_current_screen();
+        if (!$screen) return;
+        
+        // Add styles for the business listing screen
+        if ($screen->id === 'edit-business') {
+            ?>
+            <style>
+                .column-photos {
+                    width: 80px;
+                    text-align: center;
+                }
+                
+                .gpd-no-photos {
+                    color: #a00;
+                    font-weight: bold;
+                }
+                
+                .gpd-add-photos-link {
+                    display: block;
+                    font-size: 11px;
+                    margin-top: 4px;
+                }
+                
+                .gpd-photos-count {
+                    position: relative;
+                }
+                
+                .gpd-count {
+                    font-weight: bold;
+                    color: #0073aa;
+                }
+                
+                .gpd-photo-preview-container {
+                    display: none;
+                    position: absolute;
+                    z-index: 10;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    top: 20px;
+                    padding: 5px;
+                    background: #fff;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                    border-radius: 5px;
+                }
+                
+                .gpd-photos-count:hover .gpd-photo-preview-container {
+                    display: block;
+                }
+                
+                .gpd-photo-preview {
+                    max-width: 100px;
+                    height: auto;
+                    border-radius: 3px;
+                }
+                
+                .dashicons-star-filled {
+                    color: #f1c40f;
+                    margin-left: 3px;
+                    font-size: 16px;
+                    line-height: 1.5;
+                    width: 16px;
+                    height: 16px;
+                }
+            </style>
+            <?php
+        }
+        
+        // Import page styles
+        if ($screen->id === 'business_page_gpd-import') {
+            ?>
+            <style>
+                .wp-list-table .check-column {
+                    width: 2.2em;
+                }
+            </style>
+            <?php
+        }
     }
 
     /**
@@ -514,18 +817,3 @@ class GPD_Admin_UI {
         exit;
     }
 }
-
-// Add a little extra CSS for better styling
-add_action('admin_head', function() {
-    $screen = get_current_screen();
-    if (!$screen || $screen->id !== 'business_page_gpd-import') {
-        return;
-    }
-    ?>
-    <style>
-        .wp-list-table .check-column {
-            width: 2.2em;
-        }
-    </style>
-    <?php
-});
