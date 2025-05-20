@@ -67,6 +67,20 @@ class GPD_Admin_UI {
                     );
                 }
                 
+                // Add info about photo import if photo limit is set
+                $photo_limit = (int) get_option('gpd_photo_limit', 3);
+                if ($photo_limit > 0) {
+                    $message .= ' ' . sprintf(
+                        _n(
+                            'Up to %d photo imported per business with featured image set.',
+                            'Up to %d photos imported per business with featured images set.',
+                            $photo_limit,
+                            'google-places-directory'
+                        ),
+                        $photo_limit
+                    );
+                }
+                
                 echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($message) . '</p></div>';
             }
         }
@@ -109,6 +123,7 @@ class GPD_Admin_UI {
         $next_page_token  = '';
         $has_error        = false;
         $error_message    = '';
+        $photo_limit      = (int) get_option('gpd_photo_limit', 3);
 
         // Fetch all imported place IDs to flag in the table
         $imported_posts = get_posts([
@@ -201,11 +216,25 @@ class GPD_Admin_UI {
             <?php if (!$has_error && $query): ?>
                 <p class="gpd-search-summary">
                     <?php
-                    printf(
+                    $summary = sprintf(
                         __('Showing results for "%s" within %d km', 'google-places-directory'),
                         esc_html($query),
                         $selected_radius
                     );
+                    
+                    // Add photo import info if enabled
+                    if ($photo_limit > 0) {
+                        $summary .= ' · ' . sprintf(
+                            _n(
+                                'Will import %d photo per business', 
+                                'Will import up to %d photos per business', 
+                                $photo_limit,
+                                'google-places-directory'
+                            ),
+                            $photo_limit
+                        );
+                    }
+                    echo esc_html($summary);
                     ?>
                 </p>
             <?php endif; ?>
@@ -266,10 +295,13 @@ class GPD_Admin_UI {
                         <thead>
                             <tr>
                                 <th class="check-column"></th>
-                                <th><?php esc_html_e( 'Name',    'google-places-directory' ); ?></th>
+                                <th><?php esc_html_e( 'Name', 'google-places-directory' ); ?></th>
                                 <th><?php esc_html_e( 'Address', 'google-places-directory' ); ?></th>
-                                <th><?php esc_html_e( 'Type',    'google-places-directory' ); ?></th>
+                                <th><?php esc_html_e( 'Type', 'google-places-directory' ); ?></th>
                                 <th class="rating-column"><?php esc_html_e( 'Rating', 'google-places-directory' ); ?></th>
+                                <?php if ($photo_limit > 0): ?>
+                                <th class="photo-column"><?php esc_html_e( 'Photos', 'google-places-directory' ); ?></th>
+                                <?php endif; ?>
                             </tr>
                         </thead>
                         <tbody>
@@ -301,6 +333,11 @@ class GPD_Admin_UI {
                                         —
                                     <?php endif; ?>
                                 </td>
+                                <?php if ($photo_limit > 0): ?>
+                                <td class="photo-column">
+                                    <span class="dashicons dashicons-camera" title="<?php esc_attr_e('Photos will be imported', 'google-places-directory'); ?>"></span>
+                                </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -382,6 +419,14 @@ class GPD_Admin_UI {
             }
             .rating-column {
                 width: 80px;
+            }
+            .photo-column {
+                width: 60px;
+                text-align: center;
+            }
+            .photo-column .dashicons {
+                color: #0073aa;
+                font-size: 18px;
             }
             .gpd-star-rating {
                 display: flex;
