@@ -42,14 +42,7 @@ class GPD_Admin_UI {
             'gpd-import',
             [ $this, 'render_import_page' ]
         );
-        add_submenu_page(
-            'edit.php?post_type=business',
-            __( 'Settings', 'google-places-directory' ),
-            __( 'Settings', 'google-places-directory' ),
-            'manage_options',
-            'gpd-settings',
-            [ GPD_Settings::instance(), 'render_settings_page' ]
-        );
+       
     }
 
     // Remove these two methods entirely to prevent duplicate columns
@@ -78,7 +71,7 @@ class GPD_Admin_UI {
         $selected_limit   = intval( $_GET['limit']   ?? 10 );
         $query            = sanitize_text_field( $_GET['query']   ?? '' );
         $incoming_token   = sanitize_text_field( $_GET['pagetoken'] ?? '' );
-        $prev_token       = sanitize_text_field( $_GET['prevtok']   ?? '' );
+        $prev_token       = sanitize_text_field( $_GET['prevtok']   ?? '' ); // This $prev_token is from _GET
         $places           = [];
         $next_page_token  = '';
 
@@ -153,7 +146,7 @@ class GPD_Admin_UI {
                                 'query'      => $query,
                                 'radius'     => $selected_radius,
                                 'limit'      => $selected_limit,
-                                'pagetoken'  => $prev_token,
+                                'pagetoken'  => $prev_token, // Correct: $prev_token for "Prev Page" link's pagetoken
                             ], admin_url( 'edit.php' ) ) ); ?>"
                         ><?php esc_html_e( 'Prev Page', 'google-places-directory' ); ?></a>
                     <?php endif; ?>
@@ -167,7 +160,7 @@ class GPD_Admin_UI {
                                 'query'      => $query,
                                 'radius'     => $selected_radius,
                                 'limit'      => $selected_limit,
-                                'prevtok'    => $incoming_token,
+                                'prevtok'    => $incoming_token, // Correct: current $incoming_token becomes prevtok for next page
                                 'pagetoken'  => $next_page_token,
                             ], admin_url( 'edit.php' ) ) ); ?>"
                         ><?php esc_html_e( 'Next Page', 'google-places-directory' ); ?></a>
@@ -183,6 +176,7 @@ class GPD_Admin_UI {
                     <input type="hidden" name="radius"    value="<?php echo esc_attr( $selected_radius ); ?>">
                     <input type="hidden" name="limit"     value="<?php echo esc_attr( $selected_limit ); ?>">
                     <input type="hidden" name="pagetoken" value="<?php echo esc_attr( $incoming_token ); ?>">
+                    <input type="hidden" name="prevtok"   value="<?php echo esc_attr( $prev_token ); ?>"> {/*MODIFIED LINE: Added hidden input for prev_token*/}
 
                     <table class="widefat fixed striped">
                         <thead>
@@ -236,16 +230,17 @@ class GPD_Admin_UI {
         $radius         = intval( $_POST['radius'] );
         $limit          = intval( $_POST['limit'] );
         $incoming_token = sanitize_text_field( $_POST['pagetoken'] ?? '' );
+        $prev_token     = sanitize_text_field( $_POST['prevtok'] ?? '' ); // MODIFIED LINE: Retrieve prev_token from POST
 
         // Initialize by-reference pagination token
-        $next_page_token = '';
+        $next_page_token = ''; // This will be populated by import_places if there's a next page for the *current* set of results
 
         $places = GPD_Importer::instance()->import_places(
             $query,
             $radius * 1000,
             $limit,
-            $next_page_token,
-            $incoming_token
+            $next_page_token, // Populated by reference
+            $incoming_token   // Token for the current page of results
         );
 
         $selected  = array_keys( $_POST['places'] ?? [] );
@@ -263,9 +258,9 @@ class GPD_Admin_UI {
             'query'      => $query,
             'radius'     => $radius,
             'limit'      => $limit,
-            'pagetoken'  => $incoming_token,
-            'prevtok'    => $prev_token,
-            'next_token' => $next_page_token,
+            'pagetoken'  => $incoming_token, // To return to the same page
+            'prevtok'    => $prev_token,     // The prevtok for that same page
+            // 'next_token' => $next_page_token, // This 'next_token' isn't used by render_import_page for pagination logic
             'updated'    => $result['updated'],
             'created'    => $result['created'],
         ], admin_url( 'edit.php' ) );
