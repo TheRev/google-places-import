@@ -34,11 +34,21 @@ class GPD_Shortcodes {
      * Register frontend styles
      */
     public function register_styles() {
+        // Register CSS
         wp_register_style(
             'gpd-frontend', 
             plugin_dir_url( dirname( __FILE__ ) ) . 'assets/css/frontend.css',
             array(),
-            filemtime( plugin_dir_path( dirname( __FILE__ ) ) . 'assets/css/frontend.css' )
+            defined('GPD_VERSION') ? GPD_VERSION : '2.3.0'
+        );
+        
+        // Register JS for slider functionality
+        wp_register_script(
+            'gpd-frontend',
+            plugin_dir_url( dirname( __FILE__ ) ) . 'assets/js/frontend.js',
+            array('jquery'),
+            defined('GPD_VERSION') ? GPD_VERSION : '2.3.0',
+            true
         );
     }
 
@@ -55,6 +65,7 @@ class GPD_Shortcodes {
             'layout' => 'grid', // grid, slider, masonry
             'size' => 'medium', // thumbnail, medium, large, full
             'limit' => 10,
+            'lightbox' => 'yes', // yes, no - whether to enable lightbox
         ), $atts, 'gpd_photos' );
 
         // Get post ID either from ID parameter or by business name
@@ -102,22 +113,35 @@ class GPD_Shortcodes {
         // Enqueue stylesheet
         wp_enqueue_style( 'gpd-frontend' );
         
+        // Generate unique ID for this gallery
+        $gallery_id = 'gpd-photos-' . uniqid();
+        
         // Begin output
-        $output = '<div class="gpd-photos gpd-layout-' . esc_attr( $atts['layout'] ) . '">';
+        $output = '<div id="' . esc_attr($gallery_id) . '" class="gpd-photos gpd-layout-' . esc_attr( $atts['layout'] ) . '">';
         
         // Generate gallery based on layout type
         switch ( $atts['layout'] ) {
             case 'slider':
-                $output .= $this->generate_slider( $attachments, $atts['size'] );
+                $output .= $this->generate_slider( $attachments, $atts['size'], $gallery_id );
+                // Enqueue slider JavaScript
+                wp_enqueue_script( 'gpd-frontend' );
                 break;
                 
             case 'masonry':
-                $output .= $this->generate_masonry( $attachments, $atts['size'] );
+                $output .= $this->generate_masonry( $attachments, $atts['size'], $atts['lightbox'] === 'yes' );
+                if ($atts['lightbox'] === 'yes') {
+                    // Add lightbox functionality when enabled
+                    $output .= $this->add_lightbox_support($gallery_id);
+                }
                 break;
                 
             case 'grid':
             default:
-                $output .= $this->generate_grid( $attachments, $atts['size'] );
+                $output .= $this->generate_grid( $attachments, $atts['size'], $atts['lightbox'] === 'yes' );
+                if ($atts['lightbox'] === 'yes') {
+                    // Add lightbox functionality when enabled
+                    $output .= $this->add_lightbox_support($gallery_id);
+                }
                 break;
         }
         
@@ -140,6 +164,8 @@ class GPD_Shortcodes {
             'show_map' => 'yes', // yes, no
             'photo_size' => 'medium', // thumbnail, medium, large, full
             'layout' => 'card', // card, details
+            'photo_layout' => 'grid', // grid, slider, masonry
+            'lightbox' => 'yes', // yes, no
         ), $atts, 'gpd_business' );
         
         // Get post ID either from ID parameter or by business name
@@ -192,7 +218,13 @@ class GPD_Shortcodes {
         
         // Photos section
         if ( $atts['show_photos'] === 'yes' ) {
-            $photo_shortcode = '[gpd_photos id="' . $post_id . '" layout="grid" size="' . $atts['photo_size'] . '" limit="3"]';
+            $photo_shortcode = sprintf(
+                '[gpd_photos id="%d" layout="%s" size="%s" limit="3" lightbox="%s"]', 
+                $post_id, 
+                $atts['photo_layout'],
+                $atts['photo_size'],
+                $atts['lightbox']
+            );
             $output .= do_shortcode( $photo_shortcode );
         }
         
@@ -296,17 +328,23 @@ class GPD_Shortcodes {
      *
      * @param array $attachments Attachment IDs
      * @param string $size Image size
+     * @param bool $lightbox Whether to enable lightbox functionality
      * @return string HTML output
      */
-    private function generate_grid( $attachments, $size ) {
+    private function generate_grid( $attachments, $size, $lightbox = true ) {
         $output = '<div class="gpd-photo-grid">';
         
         foreach ( $attachments as $id ) {
             $image = wp_get_attachment_image( $id, $size );
             $full_image_url = wp_get_attachment_url( $id );
+            $caption = wp_get_attachment_caption( $id ) ?: '';
             
             $output .= '<div class="gpd-photo-item">';
-            $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link">';
+            if ( $lightbox ) {
+                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" data-lightbox="gpd-gallery" data-title="' . esc_attr( $caption ) . '">';
+            } else {
+                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" target="_blank">';
+            }
             $output .= $image;
             $output .= '</a>';
             $output .= '</div>';
@@ -322,27 +360,51 @@ class GPD_Shortcodes {
      *
      * @param array $attachments Attachment IDs
      * @param string $size Image size
+     * @param string $slider_id Unique ID for slider
      * @return string HTML output
      */
-    private function generate_slider( $attachments, $size ) {
-        $output = '<div class="gpd-photo-slider">';
+    private function generate_slider( $attachments, $size, $slider_id ) {
+        $output = '<div class="gpd-photo-slider" data-slider-id="' . esc_attr($slider_id) . '">';
         $output .= '<div class="gpd-slider-track">';
         
         foreach ( $attachments as $id ) {
             $image = wp_get_attachment_image( $id, $size );
-            $output .= '<div class="gpd-slider-item">' . $image . '</div>';
+            $full_image_url = wp_get_attachment_url( $id );
+            
+            $output .= '<div class="gpd-slider-item">';
+            $output .= '<a href="' . esc_url( $full_image_url ) . '" target="_blank">';
+            $output .= $image;
+            $output .= '</a>';
+            $output .= '</div>';
         }
         
         $output .= '</div>';
         
         if ( count( $attachments ) > 1 ) {
             $output .= '<div class="gpd-slider-controls">';
-            $output .= '<button class="gpd-slider-prev" aria-label="Previous">◀</button>';
-            $output .= '<button class="gpd-slider-next" aria-label="Next">▶</button>';
+            $output .= '<button class="gpd-slider-prev" aria-label="' . esc_attr__('Previous', 'google-places-directory') . '">◀</button>';
+            $output .= '<button class="gpd-slider-next" aria-label="' . esc_attr__('Next', 'google-places-directory') . '">▶</button>';
+            $output .= '</div>';
+            $output .= '<div class="gpd-slider-pagination">';
+            
+            for ($i = 0; $i < count($attachments); $i++) {
+                $active = $i === 0 ? ' gpd-active' : '';
+                $output .= '<span class="gpd-pagination-dot' . $active . '" data-slide="' . $i . '"></span>';
+            }
+            
             $output .= '</div>';
         }
         
         $output .= '</div>';
+        
+        // Add inline script to initialize this specific slider
+        $output .= '<script>
+            document.addEventListener("DOMContentLoaded", function() {
+                if (typeof gpdInitSlider === "function") {
+                    gpdInitSlider("' . esc_js($slider_id) . '");
+                }
+            });
+        </script>';
         
         return $output;
     }
@@ -352,17 +414,23 @@ class GPD_Shortcodes {
      *
      * @param array $attachments Attachment IDs
      * @param string $size Image size
+     * @param bool $lightbox Whether to enable lightbox functionality
      * @return string HTML output
      */
-    private function generate_masonry( $attachments, $size ) {
+    private function generate_masonry( $attachments, $size, $lightbox = true ) {
         $output = '<div class="gpd-photo-masonry">';
         
         foreach ( $attachments as $id ) {
             $image = wp_get_attachment_image( $id, $size );
             $full_image_url = wp_get_attachment_url( $id );
+            $caption = wp_get_attachment_caption( $id ) ?: '';
             
             $output .= '<div class="gpd-photo-item">';
-            $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link">';
+            if ( $lightbox ) {
+                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" data-lightbox="gpd-gallery" data-title="' . esc_attr( $caption ) . '">';
+            } else {
+                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" target="_blank">';
+            }
             $output .= $image;
             $output .= '</a>';
             $output .= '</div>';
@@ -371,5 +439,26 @@ class GPD_Shortcodes {
         $output .= '</div>';
         
         return $output;
+    }
+    
+    /**
+     * Add lightbox support for a gallery
+     * 
+     * @param string $gallery_id Unique ID for this gallery
+     * @return string Inline JavaScript to initialize lightbox
+     */
+    private function add_lightbox_support($gallery_id) {
+        // Enqueue lightbox script - this would need to be created separately or use a third-party library
+        wp_enqueue_script('gpd-lightbox');
+        wp_enqueue_style('gpd-lightbox');
+        
+        // Add inline JavaScript to initialize the lightbox for this gallery
+        return '<script>
+            document.addEventListener("DOMContentLoaded", function() {
+                if (typeof gpdInitLightbox === "function") {
+                    gpdInitLightbox("#' . esc_js($gallery_id) . '");
+                }
+            });
+        </script>';
     }
 }
