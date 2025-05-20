@@ -26,6 +26,7 @@ require_once GPD_PLUGIN_DIR . 'includes/class-gpd-importer.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-admin-ui.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-manager.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-docs.php';
 
 // Initialize the plugin
 function gpd_init() {
