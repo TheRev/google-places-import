@@ -23,19 +23,20 @@ class GPD_Photo_Manager {
     }
 
     private function init_hooks() {
-        // Add admin menu for photo management
-        add_action( 'admin_menu', array( $this, 'add_photo_management_page' ) );
-        
-        // Add bulk action for refreshing photos
-        add_filter( 'bulk_actions-edit-business', array( $this, 'add_bulk_actions' ) );
-        add_filter( 'handle_bulk_actions-edit-business', array( $this, 'handle_bulk_actions' ), 10, 3 );
-        
-        // Add admin notices
-        add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
-        
-        // Add Ajax handlers
-        add_action( 'wp_ajax_gpd_refresh_business_photos', array( $this, 'ajax_refresh_photos' ) );
-    }
+    // Add admin menu for photo management
+    add_action( 'admin_menu', array( $this, 'add_photo_management_page' ) );
+    
+    // Add bulk action for refreshing photos
+    add_filter( 'bulk_actions-edit-business', array( $this, 'add_bulk_actions' ) );
+    add_filter( 'handle_bulk_actions-edit-business', array( $this, 'handle_bulk_actions' ), 10, 3 );
+    
+    // Add admin notices
+    add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
+    
+    // Add Ajax handlers
+    add_action( 'wp_ajax_gpd_refresh_business_photos', array( $this, 'ajax_refresh_photos' ) );
+    add_action( 'wp_ajax_gpd_get_businesses_without_photos', array( $this, 'ajax_get_businesses_without_photos' ) );
+}
 
     /**
      * Add the photo management page to the admin menu
@@ -297,137 +298,219 @@ class GPD_Photo_Manager {
             }
         }
     }
-
+    
     /**
-     * Ajax handler for refreshing photos for a business
-     */
-    public function ajax_refresh_photos() {
-        // Check permissions
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'google-places-directory' ) ) );
+ * Ajax handler for getting businesses without photos
+ */
+public function ajax_get_businesses_without_photos() {
+    // Check permissions
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'google-places-directory' ) ) );
+    }
+
+    // Verify nonce
+    if ( ! check_ajax_referer( 'gpd_photo_management', 'nonce', false ) ) {
+        wp_send_json_error( array( 'message' => __( 'Security check failed.', 'google-places-directory' ) ) );
+    }
+
+    // Get businesses without photos
+    $businesses = $this->get_businesses_without_photos();
+    $business_data = array();
+
+    foreach ( $businesses as $business ) {
+        $business_data[] = array(
+            'id' => $business->ID,
+            'title' => $business->post_title,
+            'place_id' => get_post_meta( $business->ID, '_gpd_place_id', true ),
+        );
+    }
+
+    wp_send_json_success( array(
+        'businesses' => $business_data,
+        'count' => count( $business_data ),
+    ) );
+}
+
+/**
+ * Ajax handler for refreshing photos for a business
+ */
+public function ajax_refresh_photos() {
+    // Check permissions
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'google-places-directory' ) ) );
+    }
+
+    // Verify nonce
+    if ( ! check_ajax_referer( 'gpd_refresh_photos', 'nonce', false ) ) {
+        wp_send_json_error( array( 'message' => __( 'Security check failed.', 'google-places-directory' ) ) );
+    }
+
+    $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+    $place_id = isset( $_POST['place_id'] ) ? sanitize_text_field( $_POST['place_id'] ) : '';
+
+    if ( ! $post_id || ! $place_id ) {
+        wp_send_json_error( array( 
+            'message' => __( 'Invalid business data.', 'google-places-directory' ),
+            'post_id' => $post_id,
+            'place_id' => $place_id
+        ) );
+    }
+
+    // Get photo limit setting
+    $photo_limit = (int) get_option( 'gpd_photo_limit', 3 );
+    
+    if ( $photo_limit <= 0 ) {
+        wp_send_json_error( array( 
+            'message' => __( 'Photo importing is disabled in settings. Please set a photo limit greater than 0.', 'google-places-directory' ),
+            'post_id' => $post_id,
+            'photo_limit' => $photo_limit
+        ) );
+    }
+
+    // Fetch the business details from Google
+    $api_key = get_option( 'gpd_api_key' );
+    
+    if ( empty( $api_key ) ) {
+        wp_send_json_error( array( 
+            'message' => __( 'Google API Key is not configured.', 'google-places-directory' ),
+            'post_id' => $post_id
+        ) );
+    }
+    
+    // Make API request to get details including photos
+    $api_url = add_query_arg(
+        array(
+            'fields' => 'name,photos',
+            'place_id' => $place_id,
+            'key' => $api_key,
+        ),
+        'https://places.googleapis.com/v1/places'
+    );
+
+    // Debug info
+    $debug_info = array(
+        'api_url' => preg_replace('/key=([^&]+)/', 'key=REDACTED', $api_url), // Redact the API key for security
+        'place_id' => $place_id,
+        'photo_limit' => $photo_limit
+    );
+
+    $response = wp_remote_get( $api_url );
+
+    if ( is_wp_error( $response ) ) {
+        wp_send_json_error( array( 
+            'message' => 'API Request Error: ' . $response->get_error_message(),
+            'post_id' => $post_id,
+            'debug' => $debug_info
+        ) );
+    }
+
+    $status_code = wp_remote_retrieve_response_code( $response );
+    if ( $status_code !== 200 ) {
+        wp_send_json_error( array( 
+            'message' => 'API Error: HTTP Status ' . $status_code,
+            'post_id' => $post_id,
+            'debug' => $debug_info,
+            'response' => wp_remote_retrieve_body( $response )
+        ) );
+    }
+
+    $body = wp_remote_retrieve_body( $response );
+    $data = json_decode( $body, true );
+
+    if ( empty( $data ) ) {
+        wp_send_json_error( array( 
+            'message' => __( 'Failed to parse API response.', 'google-places-directory' ),
+            'post_id' => $post_id,
+            'debug' => $debug_info,
+            'response_body' => $body
+        ) );
+    }
+    
+    if ( isset( $data['error'] ) ) {
+        $error = isset( $data['error']['message'] ) ? $data['error']['message'] : __( 'Unknown API error', 'google-places-directory' );
+        wp_send_json_error( array( 
+            'message' => 'API Error: ' . $error,
+            'post_id' => $post_id,
+            'debug' => $debug_info,
+            'error_details' => $data['error']
+        ) );
+    }
+
+    // Check if photos are available
+    if ( empty( $data['photos'] ) ) {
+        wp_send_json_success( array( 
+            'message' => __( 'No photos available for this business in Google Places.', 'google-places-directory' ),
+            'post_id' => $post_id,
+            'photos_added' => 0,
+            'debug' => $debug_info
+        ) );
+    }
+
+    // Process the photos
+    $photos = array_slice( $data['photos'], 0, $photo_limit );
+    $photo_references = array();
+    $photos_added = 0;
+
+    // Delete any existing photos for this business
+    $this->remove_business_photos( $post_id );
+
+    // Import each photo
+    $photo_results = array();
+    foreach ( $photos as $photo ) {
+        if (empty($photo['name'])) {
+            $photo_results[] = array(
+                'status' => 'error',
+                'message' => 'No photo name/reference found',
+                'photo_data' => $photo
+            );
+            continue;
         }
 
-        // Verify nonce
-        if ( ! check_ajax_referer( 'gpd_refresh_photos', 'nonce', false ) ) {
-            wp_send_json_error( array( 'message' => __( 'Security check failed.', 'google-places-directory' ) ) );
-        }
-
-        $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
-        $place_id = isset( $_POST['place_id'] ) ? sanitize_text_field( $_POST['place_id'] ) : '';
-
-        if ( ! $post_id || ! $place_id ) {
-            wp_send_json_error( array( 'message' => __( 'Invalid business data.', 'google-places-directory' ) ) );
-        }
-
-        // Get photo limit setting
-        $photo_limit = (int) get_option( 'gpd_photo_limit', 3 );
+        $photo_reference = $photo['name'];
+        $photo_references[] = $photo_reference;
         
-        if ( $photo_limit <= 0 ) {
-            wp_send_json_error( array( 
-                'message' => __( 'Photo importing is disabled in settings.', 'google-places-directory' ),
-                'post_id' => $post_id
-            ) );
-        }
-
-        // Fetch the business details from Google
-        $api_key = get_option( 'gpd_api_key' );
-        
-        if ( empty( $api_key ) ) {
-            wp_send_json_error( array( 
-                'message' => __( 'Google API Key is not configured.', 'google-places-directory' ),
-                'post_id' => $post_id
-            ) );
-        }
-        
-        // Make API request to get details including photos
-        $api_url = add_query_arg(
+        // Build photo URL
+        $photo_url = add_query_arg(
             array(
-                'fields' => 'name,photos',
-                'place_id' => $place_id,
+                'maxwidth' => 1200,
+                'maxheight' => 1200,
+                'photo_reference' => $photo_reference,
                 'key' => $api_key,
             ),
-            'https://places.googleapis.com/v1/places'
+            'https://places.googleapis.com/v1/places/photos'
         );
 
-        $response = wp_remote_get( $api_url );
-
-        if ( is_wp_error( $response ) ) {
-            wp_send_json_error( array( 
-                'message' => $response->get_error_message(),
-                'post_id' => $post_id
-            ) );
-        }
-
-        $body = wp_remote_retrieve_body( $response );
-        $data = json_decode( $body, true );
-
-        if ( empty( $data ) || isset( $data['error'] ) ) {
-            $error = isset( $data['error']['message'] ) ? $data['error']['message'] : __( 'Failed to retrieve business data from Google.', 'google-places-directory' );
-            wp_send_json_error( array( 
-                'message' => $error,
-                'post_id' => $post_id,
-                'data' => $data
-            ) );
-        }
-
-        // Check if photos are available
-        if ( empty( $data['photos'] ) ) {
-            wp_send_json_success( array( 
-                'message' => __( 'No photos available for this business.', 'google-places-directory' ),
-                'post_id' => $post_id,
-                'photos_added' => 0
-            ) );
-        }
-
-        // Process the photos
-        $photos = array_slice( $data['photos'], 0, $photo_limit );
-        $photo_references = array();
-        $photos_added = 0;
-
-        // Delete any existing photos for this business
-        $this->remove_business_photos( $post_id );
-
-        // Import each photo
-        foreach ( $photos as $photo ) {
-            $photo_reference = $photo['name'];
-            
-            // Skip if no photo reference
-            if ( empty( $photo_reference ) ) {
-                continue;
-            }
-
-            $photo_references[] = $photo_reference;
-            
-            // Build photo URL
-            $photo_url = add_query_arg(
-                array(
-                    'maxwidth' => 1200,
-                    'maxheight' => 1200,
-                    'photo_reference' => $photo_reference,
-                    'key' => $api_key,
-                ),
-                'https://places.googleapis.com/v1/places/photos'
+        // Download and attach the photo
+        $attachment_id = $this->download_and_attach_photo( $photo_url, $post_id, $photo_reference );
+        
+        if ( $attachment_id ) {
+            $photos_added++;
+            $photo_results[] = array(
+                'status' => 'success',
+                'attachment_id' => $attachment_id,
+                'photo_reference' => $photo_reference
             );
-
-            // Download and attach the photo
-            $attachment_id = $this->download_and_attach_photo( $photo_url, $post_id, $photo_reference );
             
-            if ( $attachment_id ) {
-                $photos_added++;
-                
-                // Set the first photo as the featured image
-                if ( count( $photo_references ) === 1 ) {
-                    set_post_thumbnail( $post_id, $attachment_id );
-                }
+            // Set the first photo as the featured image
+            if ( count( $photo_references ) === 1 ) {
+                set_post_thumbnail( $post_id, $attachment_id );
             }
+        } else {
+            $photo_results[] = array(
+                'status' => 'error',
+                'message' => 'Failed to download or attach photo',
+                'photo_reference' => $photo_reference
+            );
         }
+    }
 
-        // Save photo references
-        if ( ! empty( $photo_references ) ) {
-            update_post_meta( $post_id, '_gpd_photo_references', $photo_references );
-        }
+    // Save photo references
+    if ( ! empty( $photo_references ) ) {
+        update_post_meta( $post_id, '_gpd_photo_references', $photo_references );
+    }
 
-        // Return success
+    // Return success
+    if ($photos_added > 0) {
         wp_send_json_success( array( 
             'message' => sprintf(
                 _n(
@@ -439,9 +522,24 @@ class GPD_Photo_Manager {
                 $photos_added
             ),
             'post_id' => $post_id,
-            'photos_added' => $photos_added
+            'photos_added' => $photos_added,
+            'debug' => array_merge($debug_info, array(
+                'photo_results' => $photo_results,
+                'total_photos_found' => count($data['photos']),
+                'photos_processed' => count($photos)
+            ))
+        ) );
+    } else {
+        wp_send_json_error( array( 
+            'message' => __( 'Failed to download any photos.', 'google-places-directory' ),
+            'post_id' => $post_id,
+            'debug' => array_merge($debug_info, array(
+                'photo_results' => $photo_results,
+                'total_photos_found' => isset($data['photos']) ? count($data['photos']) : 0
+            ))
         ) );
     }
+}
 
     /**
      * Render the photo management page
@@ -737,81 +835,153 @@ class GPD_Photo_Manager {
                 $('.gpd-total').text(totalItems);
                 
                 function processNextBusiness(index) {
-                    if (index >= businesses.length) {
-                        // All done
-                        $('.gpd-batch-results').html(
-                            '<p><strong><?php esc_html_e( 'Processing complete!', 'google-places-directory' ); ?></strong></p>' +
-                            '<p><?php esc_html_e( 'Results:', 'google-places-directory' ); ?> ' +
-                            successCount + ' <?php esc_html_e( 'businesses updated with', 'google-places-directory' ); ?> ' +
-                            photoCount + ' <?php esc_html_e( 'total photos', 'google-places-directory' ); ?>. ' +
-                            failCount + ' <?php esc_html_e( 'businesses failed.', 'google-places-directory' ); ?></p>' +
-                            '<p><a href="<?php echo esc_url( admin_url( 'edit.php?post_type=business&page=gpd-photo-management' ) ); ?>" class="button button-primary">' +
-                            '<?php esc_html_e( 'Refresh Page', 'google-places-directory' ); ?></a></p>'
-                        );
-                        return;
+    if (index >= businesses.length) {
+        // All done
+        var resultHtml = 
+            '<p><strong><?php esc_html_e("Processing complete!", "google-places-directory"); ?></strong></p>' +
+            '<p><?php esc_html_e("Results:", "google-places-directory"); ?> ' +
+            successCount + ' <?php esc_html_e("businesses updated with", "google-places-directory"); ?> ' +
+            photoCount + ' <?php esc_html_e("total photos", "google-places-directory"); ?>. ' +
+            failCount + ' <?php esc_html_e("businesses failed.", "google-places-directory"); ?></p>';
+            
+        // Add error details section if there were failures
+        if (failCount > 0) {
+            resultHtml += 
+                '<div class="gpd-error-details">' +
+                '<h4><?php esc_html_e("Error Details", "google-places-directory"); ?></h4>' +
+                '<div id="gpd-error-list"></div>' +
+                '</div>';
+        }
+        
+        resultHtml += 
+            '<p><a href="<?php echo esc_url(admin_url("edit.php?post_type=business&page=gpd-photo-management")); ?>" class="button button-primary">' +
+            '<?php esc_html_e("Refresh Page", "google-places-directory"); ?></a></p>';
+        
+        $('.gpd-batch-results').html(resultHtml);
+        return;
+    }
+    
+    var business = businesses[index];
+    
+    // Call AJAX to process this item
+    $.ajax({
+        url: ajaxurl,
+        type: 'POST',
+        data: {
+            action: 'gpd_refresh_business_photos',
+            post_id: business.id,
+            place_id: business.place_id,
+            nonce: '<?php echo wp_create_nonce("gpd_refresh_photos"); ?>'
+        },
+        success: function(response) {
+            processedItems++;
+            
+            if (response.success) {
+                successCount++;
+                photoCount += response.data.photos_added || 0;
+                
+                // Log success in console for debugging
+                console.log('Success for business: ' + business.title, response.data);
+            } else {
+                failCount++;
+                
+                // Log error in console
+                console.error('Error for business: ' + business.title, response.data);
+                
+                // Store error details
+                var errorMsg = response.data.message || '<?php esc_html_e("Unknown error", "google-places-directory"); ?>';
+                
+                // Add to error list if it exists
+                if ($('#gpd-error-list').length) {
+                    var errorDetails = '';
+                    
+                    // Add debug info if available
+                    if (response.data.debug) {
+                        var debugInfo = response.data.debug;
+                        errorDetails += '<details><summary><?php esc_html_e("Show Technical Details", "google-places-directory"); ?></summary>';
+                        
+                        if (debugInfo.api_url) {
+                            errorDetails += '<p><strong>API URL:</strong> ' + debugInfo.api_url + '</p>';
+                        }
+                        
+                        if (debugInfo.place_id) {
+                            errorDetails += '<p><strong>Place ID:</strong> ' + debugInfo.place_id + '</p>';
+                        }
+                        
+                        if (response.data.response_body) {
+                            errorDetails += '<p><strong>Response:</strong> ' + 
+                                $('<div/>').text(response.data.response_body).html() + '</p>';
+                        }
+                        
+                        errorDetails += '</details>';
                     }
                     
-                    var business = businesses[index];
-                    
-                    // Call AJAX to process this item
-                    $.ajax({
-                        url: ajaxurl,
-                        type: 'POST',
-                        data: {
-                            action: 'gpd_refresh_business_photos',
-                            post_id: business.id,
-                            place_id: business.place_id,
-                            nonce: '<?php echo wp_create_nonce('gpd_refresh_photos'); ?>'
-                        },
-                        success: function(response) {
-                            processedItems++;
-                            
-                            if (response.success) {
-                                successCount++;
-                                photoCount += response.data.photos_added || 0;
-                            } else {
-                                failCount++;
-                            }
-                            
-                            // Update progress
-                            var percent = Math.round((processedItems / totalItems) * 100);
-                            $('.gpd-progress-complete').css('width', percent + '%');
-                            $('.gpd-processed').text(processedItems);
-                            
-                            // Update status message
-                            $('.gpd-batch-results').html(
-                                '<p><?php esc_html_e( 'Processing...', 'google-places-directory' ); ?> ' + 
-                                processedItems + ' / ' + totalItems + ' <?php esc_html_e( 'businesses', 'google-places-directory' ); ?></p>' +
-                                '<p><?php esc_html_e( 'Current totals:', 'google-places-directory' ); ?> ' + 
-                                successCount + ' <?php esc_html_e( 'updated with', 'google-places-directory' ); ?> ' +
-                                photoCount + ' <?php esc_html_e( 'photos', 'google-places-directory' ); ?></p>'
-                            );
-                            
-                            // Process next item with a slight delay to avoid API rate limits
-                            setTimeout(function() {
-                                processNextBusiness(index + 1);
-                            }, 500);
-                        },
-                        error: function() {
-                            processedItems++;
-                            failCount++;
-                            
-                            // Update progress
-                            var percent = Math.round((processedItems / totalItems) * 100);
-                            $('.gpd-progress-complete').css('width', percent + '%');
-                            $('.gpd-processed').text(processedItems);
-                            
-                            // Process next item with a delay
-                            setTimeout(function() {
-                                processNextBusiness(index + 1);
-                            }, 500);
-                        }
-                    });
+                    $('#gpd-error-list').append(
+                        '<div class="gpd-error-item">' +
+                        '<p><strong>' + business.title + ' (ID: ' + business.id + ')</strong>: ' + errorMsg + '</p>' +
+                        errorDetails +
+                        '</div>'
+                    );
                 }
-                
-                // Start processing
-                processNextBusiness(0);
             }
+            
+            // Update progress
+            var percent = Math.round((processedItems / totalItems) * 100);
+            $('.gpd-progress-complete').css('width', percent + '%');
+            $('.gpd-processed').text(processedItems);
+            
+            // Update status message
+            var statusHtml = 
+                '<p><?php esc_html_e("Processing...", "google-places-directory"); ?> ' + 
+                processedItems + ' / ' + totalItems + ' <?php esc_html_e("businesses", "google-places-directory"); ?></p>' +
+                '<p><?php esc_html_e("Current totals:", "google-places-directory"); ?> ' + 
+                successCount + ' <?php esc_html_e("updated with", "google-places-directory"); ?> ' +
+                photoCount + ' <?php esc_html_e("photos", "google-places-directory"); ?>';
+                
+            // Add simple error counter if failures
+            if (failCount > 0) {
+                statusHtml += ' | <span class="gpd-error-count">' + failCount + 
+                    ' <?php esc_html_e("failed", "google-places-directory"); ?></span>';
+            }
+            
+            statusHtml += '</p>';
+            
+            $('.gpd-batch-results').html(statusHtml);
+            
+            // Process next item with a slight delay to avoid API rate limits
+            setTimeout(function() {
+                processNextBusiness(index + 1);
+            }, 500);
+        },
+        error: function(xhr, status, error) {
+            processedItems++;
+            failCount++;
+            
+            // Log AJAX error
+            console.error('AJAX error for business: ' + business.title, {xhr: xhr, status: status, error: error});
+            
+            // Add to error list if it exists
+            if ($('#gpd-error-list').length) {
+                $('#gpd-error-list').append(
+                    '<div class="gpd-error-item">' +
+                    '<p><strong>' + business.title + ' (ID: ' + business.id + ')</strong>: ' + 
+                    '<?php esc_html_e("AJAX request failed", "google-places-directory"); ?> - ' + status + ' ' + error + '</p>' +
+                    '</div>'
+                );
+            }
+            
+            // Update progress
+            var percent = Math.round((processedItems / totalItems) * 100);
+            $('.gpd-progress-complete').css('width', percent + '%');
+            $('.gpd-processed').text(processedItems);
+            
+            // Process next item with a delay
+            setTimeout(function() {
+                processNextBusiness(index + 1);
+            }, 500);
+        }
+    });
+}
         });
         </script>
         <?php
@@ -915,70 +1085,79 @@ class GPD_Photo_Manager {
         return get_posts( $args );
     }
 
-    /**
-     * Download and attach a photo to a business
-     *
-     * @param string $photo_url URL of the photo
-     * @param int $post_id Post ID to attach to
-     * @param string $photo_reference Photo reference ID
-     * @return int|bool Attachment ID on success, false on failure
-     */
-    private function download_and_attach_photo( $photo_url, $post_id, $photo_reference ) {
-        // Check if we already have this photo
-        $existing = new WP_Query( array(
-            'post_type' => 'attachment',
-            'posts_per_page' => 1,
-            'fields' => 'ids',
-            'meta_query' => array(
-                array(
-                    'key' => '_gpd_photo_reference',
-                    'value' => $photo_reference,
-                ),
+/**
+ * Download and attach a photo to a business
+ *
+ * @param string $photo_url URL of the photo
+ * @param int $post_id Post ID to attach to
+ * @param string $photo_reference Photo reference ID
+ * @return int|bool Attachment ID on success, false on failure
+ */
+private function download_and_attach_photo( $photo_url, $post_id, $photo_reference ) {
+    // Check if we already have this photo
+    $existing = new WP_Query( array(
+        'post_type' => 'attachment',
+        'posts_per_page' => 1,
+        'fields' => 'ids',
+        'meta_query' => array(
+            array(
+                'key' => '_gpd_photo_reference',
+                'value' => $photo_reference,
             ),
-        ) );
-        
-        if ( $existing->have_posts() ) {
-            return $existing->posts[0];
-        }
-        
-        // Get business name for image title
-        $business_name = get_the_title( $post_id );
-        
-        // Include required files for media handling
-        require_once( ABSPATH . 'wp-admin/includes/image.php' );
-        require_once( ABSPATH . 'wp-admin/includes/file.php' );
-        require_once( ABSPATH . 'wp-admin/includes/media.php' );
-        
-        // Download the image
-        $tmp = download_url( $photo_url );
-        
-        if ( is_wp_error( $tmp ) ) {
-            return false;
-        }
-        
-        // Generate a unique filename
-        $filename = sanitize_file_name( $business_name . '-' . substr( $photo_reference, -8 ) . '.jpg' );
-        
-        $file_array = array(
-            'name' => $filename,
-            'tmp_name' => $tmp,
-        );
-        
-        // Upload and attach the image
-        $attachment_id = media_handle_sideload( $file_array, $post_id, $business_name . ' - ' . __( 'Google Places Photo', 'google-places-directory' ) );
-        
-        // Remove temporary file
-        @unlink( $tmp );
-        
-        if ( is_wp_error( $attachment_id ) ) {
-            return false;
-        }
-        
-        // Store photo reference as attachment meta
-        update_post_meta( $attachment_id, '_gpd_photo_reference', $photo_reference );
-        
-        return $attachment_id;
+        ),
+    ) );
+    
+    if ( $existing->have_posts() ) {
+        return $existing->posts[0];
     }
+    
+    // Get business name for image title
+    $business_name = get_the_title( $post_id );
+    
+    // Include required files for media handling
+    require_once( ABSPATH . 'wp-admin/includes/image.php' );
+    require_once( ABSPATH . 'wp-admin/includes/file.php' );
+    require_once( ABSPATH . 'wp-admin/includes/media.php' );
+    
+    // Download the image
+    $tmp = download_url( $photo_url );
+    
+    if ( is_wp_error( $tmp ) ) {
+        error_log('Google Places Directory: Failed to download photo - ' . $tmp->get_error_message());
+        return false;
+    }
+    
+    // Check if downloaded file is valid
+    if (!file_exists($tmp) || filesize($tmp) < 100) { // Arbitrary min size to ensure it's not an error response
+        @unlink($tmp);
+        error_log('Google Places Directory: Invalid image file downloaded - too small or empty');
+        return false;
+    }
+    
+    // Generate a unique filename
+    $filename = sanitize_file_name( $business_name . '-' . substr( $photo_reference, -8 ) . '.jpg' );
+    
+    $file_array = array(
+        'name' => $filename,
+        'tmp_name' => $tmp,
+    );
+    
+    // Upload and attach the image
+    $attachment_id = media_handle_sideload( $file_array, $post_id, $business_name . ' - ' . __( 'Google Places Photo', 'google-places-directory' ) );
+    
+    // Remove temporary file
+    @unlink( $tmp );
+    
+    if ( is_wp_error( $attachment_id ) ) {
+        error_log('Google Places Directory: Failed to create attachment - ' . $attachment_id->get_error_message());
+        return false;
+    }
+    
+    // Store photo reference as attachment meta
+    update_post_meta( $attachment_id, '_gpd_photo_reference', $photo_reference );
+    
+    return $attachment_id;
+}
 
     /**
      * Remove all photos for a business
