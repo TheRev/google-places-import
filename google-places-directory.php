@@ -3,7 +3,7 @@
  * Plugin Name: Google Places Directory
  * Description: A directory plugin to search, import, and manage business listings via the Google Places API.
  * Version:     1.0.0
- * Author:      Your Name
+ * Author:      TheRev
  * Text Domain: google-places-directory
  */
 
