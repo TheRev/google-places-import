@@ -336,127 +336,141 @@ public function ajax_get_businesses_without_photos() {
  */
 public function ajax_refresh_photos() {
     // Check permissions
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'google-places-directory' ) ) );
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => __('Permission denied.', 'google-places-directory')));
     }
 
     // Verify nonce
-    if ( ! check_ajax_referer( 'gpd_refresh_photos', 'nonce', false ) ) {
-        wp_send_json_error( array( 'message' => __( 'Security check failed.', 'google-places-directory' ) ) );
+    if (!check_ajax_referer('gpd_refresh_photos', 'nonce', false)) {
+        wp_send_json_error(array('message' => __('Security check failed.', 'google-places-directory')));
     }
 
-    $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
-    $place_id = isset( $_POST['place_id'] ) ? sanitize_text_field( $_POST['place_id'] ) : '';
+    $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+    $place_id = isset($_POST['place_id']) ? sanitize_text_field($_POST['place_id']) : '';
 
-    if ( ! $post_id || ! $place_id ) {
-        wp_send_json_error( array( 
-            'message' => __( 'Invalid business data.', 'google-places-directory' ),
+    if (!$post_id || !$place_id) {
+        wp_send_json_error(array(
+            'message' => __('Invalid business data.', 'google-places-directory'),
             'post_id' => $post_id,
             'place_id' => $place_id
-        ) );
+        ));
     }
 
     // Get photo limit setting
-    $photo_limit = (int) get_option( 'gpd_photo_limit', 3 );
+    $photo_limit = (int)get_option('gpd_photo_limit', 3);
     
-    if ( $photo_limit <= 0 ) {
-        wp_send_json_error( array( 
-            'message' => __( 'Photo importing is disabled in settings. Please set a photo limit greater than 0.', 'google-places-directory' ),
+    if ($photo_limit <= 0) {
+        wp_send_json_error(array(
+            'message' => __('Photo importing is disabled in settings. Please set a photo limit greater than 0.', 'google-places-directory'),
             'post_id' => $post_id,
             'photo_limit' => $photo_limit
-        ) );
+        ));
     }
 
     // Fetch the business details from Google
-    $api_key = get_option( 'gpd_api_key' );
+    $api_key = get_option('gpd_api_key');
     
-    if ( empty( $api_key ) ) {
-        wp_send_json_error( array( 
-            'message' => __( 'Google API Key is not configured.', 'google-places-directory' ),
+    if (empty($api_key)) {
+        wp_send_json_error(array(
+            'message' => __('Google API Key is not configured.', 'google-places-directory'),
             'post_id' => $post_id
-        ) );
+        ));
     }
     
-    // Make API request to get details including photos
-    $api_url = add_query_arg(
-        array(
-            'fields' => 'name,photos',
-            'place_id' => $place_id,
-            'key' => $api_key,
-        ),
-        'https://places.googleapis.com/v1/places'
-    );
-
     // Debug info
     $debug_info = array(
-        'api_url' => preg_replace('/key=([^&]+)/', 'key=REDACTED', $api_url), // Redact the API key for security
         'place_id' => $place_id,
         'photo_limit' => $photo_limit
     );
 
-    $response = wp_remote_get( $api_url );
+    // In Places API v1, we need to use either /places/{place_id} or search for the place
+    // For this example, we'll assume place_id already has the proper format
+    // If not, we might need to convert from legacy place_id to v1 format
+    
+    // Check if place_id starts with "places/"
+    if (strpos($place_id, 'places/') !== 0) {
+        // This is likely a legacy place_id, construct the new format
+        $place_resource_name = 'places/' . $place_id;
+    } else {
+        // Already in the correct format
+        $place_resource_name = $place_id;
+    }
+    
+    // Request to get place details including photos
+    $response = wp_remote_get(
+        'https://places.googleapis.com/v1/' . $place_resource_name . '?fields=id,displayName,photos&key=' . urlencode($api_key),
+        array(
+            'timeout' => 30,
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'X-Goog-Api-Key' => $api_key,
+            )
+        )
+    );
 
-    if ( is_wp_error( $response ) ) {
-        wp_send_json_error( array( 
+    if (is_wp_error($response)) {
+        wp_send_json_error(array(
             'message' => 'API Request Error: ' . $response->get_error_message(),
             'post_id' => $post_id,
             'debug' => $debug_info
-        ) );
+        ));
     }
 
-    $status_code = wp_remote_retrieve_response_code( $response );
-    if ( $status_code !== 200 ) {
-        wp_send_json_error( array( 
+    $status_code = wp_remote_retrieve_response_code($response);
+    $body = wp_remote_retrieve_body($response);
+    error_log('Google Places API Response: ' . $body);
+    
+    if ($status_code !== 200) {
+        wp_send_json_error(array(
             'message' => 'API Error: HTTP Status ' . $status_code,
             'post_id' => $post_id,
             'debug' => $debug_info,
-            'response' => wp_remote_retrieve_body( $response )
-        ) );
+            'response' => $body
+        ));
     }
 
-    $body = wp_remote_retrieve_body( $response );
-    $data = json_decode( $body, true );
+    $data = json_decode($body, true);
 
-    if ( empty( $data ) ) {
-        wp_send_json_error( array( 
-            'message' => __( 'Failed to parse API response.', 'google-places-directory' ),
+    if (empty($data)) {
+        wp_send_json_error(array(
+            'message' => __('Failed to parse API response.', 'google-places-directory'),
             'post_id' => $post_id,
             'debug' => $debug_info,
             'response_body' => $body
-        ) );
+        ));
     }
     
-    if ( isset( $data['error'] ) ) {
-        $error = isset( $data['error']['message'] ) ? $data['error']['message'] : __( 'Unknown API error', 'google-places-directory' );
-        wp_send_json_error( array( 
+    if (isset($data['error'])) {
+        $error = isset($data['error']['message']) ? $data['error']['message'] : __('Unknown API error', 'google-places-directory');
+        wp_send_json_error(array(
             'message' => 'API Error: ' . $error,
             'post_id' => $post_id,
             'debug' => $debug_info,
             'error_details' => $data['error']
-        ) );
+        ));
     }
 
     // Check if photos are available
-    if ( empty( $data['photos'] ) ) {
-        wp_send_json_success( array( 
-            'message' => __( 'No photos available for this business in Google Places.', 'google-places-directory' ),
+    if (empty($data['photos'])) {
+        wp_send_json_success(array(
+            'message' => __('No photos available for this business in Google Places.', 'google-places-directory'),
             'post_id' => $post_id,
             'photos_added' => 0,
             'debug' => $debug_info
-        ) );
+        ));
     }
 
     // Process the photos
-    $photos = array_slice( $data['photos'], 0, $photo_limit );
+    $photos = array_slice($data['photos'], 0, $photo_limit);
     $photo_references = array();
     $photos_added = 0;
 
     // Delete any existing photos for this business
-    $this->remove_business_photos( $post_id );
+    $this->remove_business_photos($post_id);
 
     // Import each photo
     $photo_results = array();
-    foreach ( $photos as $photo ) {
+    foreach ($photos as $photo) {
         if (empty($photo['name'])) {
             $photo_results[] = array(
                 'status' => 'error',
@@ -466,24 +480,14 @@ public function ajax_refresh_photos() {
             continue;
         }
 
+        // In Places API v1, the photo reference is the full resource name
         $photo_reference = $photo['name'];
         $photo_references[] = $photo_reference;
         
-        // Build photo URL
-        $photo_url = add_query_arg(
-            array(
-                'maxwidth' => 1200,
-                'maxheight' => 1200,
-                'photo_reference' => $photo_reference,
-                'key' => $api_key,
-            ),
-            'https://places.googleapis.com/v1/places/photos'
-        );
-
         // Download and attach the photo
-        $attachment_id = $this->download_and_attach_photo( $photo_url, $post_id, $photo_reference );
+        $attachment_id = $this->download_and_attach_photo($photo_reference, $post_id, $photo_reference);
         
-        if ( $attachment_id ) {
+        if ($attachment_id) {
             $photos_added++;
             $photo_results[] = array(
                 'status' => 'success',
@@ -492,8 +496,8 @@ public function ajax_refresh_photos() {
             );
             
             // Set the first photo as the featured image
-            if ( count( $photo_references ) === 1 ) {
-                set_post_thumbnail( $post_id, $attachment_id );
+            if (count($photo_references) === 1) {
+                set_post_thumbnail($post_id, $attachment_id);
             }
         } else {
             $photo_results[] = array(
@@ -505,13 +509,13 @@ public function ajax_refresh_photos() {
     }
 
     // Save photo references
-    if ( ! empty( $photo_references ) ) {
-        update_post_meta( $post_id, '_gpd_photo_references', $photo_references );
+    if (!empty($photo_references)) {
+        update_post_meta($post_id, '_gpd_photo_references', $photo_references);
     }
 
     // Return success
     if ($photos_added > 0) {
-        wp_send_json_success( array( 
+        wp_send_json_success(array(
             'message' => sprintf(
                 _n(
                     'Successfully added %d photo.',
@@ -528,16 +532,16 @@ public function ajax_refresh_photos() {
                 'total_photos_found' => count($data['photos']),
                 'photos_processed' => count($photos)
             ))
-        ) );
+        ));
     } else {
-        wp_send_json_error( array( 
-            'message' => __( 'Failed to download any photos.', 'google-places-directory' ),
+        wp_send_json_error(array(
+            'message' => __('Failed to download any photos.', 'google-places-directory'),
             'post_id' => $post_id,
             'debug' => array_merge($debug_info, array(
                 'photo_results' => $photo_results,
                 'total_photos_found' => isset($data['photos']) ? count($data['photos']) : 0
             ))
-        ) );
+        ));
     }
 }
 
@@ -1087,15 +1091,10 @@ public function ajax_refresh_photos() {
 
 /**
  * Download and attach a photo to a business
- *
- * @param string $photo_url URL of the photo
- * @param int $post_id Post ID to attach to
- * @param string $photo_reference Photo reference ID
- * @return int|bool Attachment ID on success, false on failure
  */
-private function download_and_attach_photo( $photo_url, $post_id, $photo_reference ) {
+private function download_and_attach_photo($photo_url, $post_id, $photo_reference) {
     // Check if we already have this photo
-    $existing = new WP_Query( array(
+    $existing = new WP_Query(array(
         'post_type' => 'attachment',
         'posts_per_page' => 1,
         'fields' => 'ids',
@@ -1105,56 +1104,95 @@ private function download_and_attach_photo( $photo_url, $post_id, $photo_referen
                 'value' => $photo_reference,
             ),
         ),
-    ) );
+    ));
     
-    if ( $existing->have_posts() ) {
+    if ($existing->have_posts()) {
         return $existing->posts[0];
     }
     
     // Get business name for image title
-    $business_name = get_the_title( $post_id );
+    $business_name = get_the_title($post_id);
     
     // Include required files for media handling
-    require_once( ABSPATH . 'wp-admin/includes/image.php' );
-    require_once( ABSPATH . 'wp-admin/includes/file.php' );
-    require_once( ABSPATH . 'wp-admin/includes/media.php' );
+    require_once(ABSPATH . 'wp-admin/includes/image.php');
+    require_once(ABSPATH . 'wp-admin/includes/file.php');
+    require_once(ABSPATH . 'wp-admin/includes/media.php');
     
-    // Download the image
-    $tmp = download_url( $photo_url );
+    // In Places API v1, photo references are full resource names, 
+    // not just IDs as in the legacy API.
+    // The URL construction needs to use proper headers and paths
     
-    if ( is_wp_error( $tmp ) ) {
-        error_log('Google Places Directory: Failed to download photo - ' . $tmp->get_error_message());
+    $api_key = get_option('gpd_api_key');
+    
+    // Use WordPress HTTP API with proper headers
+    $response = wp_remote_get(
+        "https://places.googleapis.com/v1/places/" . urlencode($photo_reference) . "/media?maxHeightPx=1200&maxWidthPx=1200&key=" . urlencode($api_key),
+        array(
+            'timeout' => 30,
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'X-Goog-Api-Key' => $api_key,
+            ),
+        )
+    );
+    
+    if (is_wp_error($response)) {
+        error_log('Google Places Directory: API request failed - ' . $response->get_error_message());
         return false;
     }
     
-    // Check if downloaded file is valid
-    if (!file_exists($tmp) || filesize($tmp) < 100) { // Arbitrary min size to ensure it's not an error response
-        @unlink($tmp);
-        error_log('Google Places Directory: Invalid image file downloaded - too small or empty');
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code !== 200) {
+        error_log('Google Places Directory: API error - Status ' . $status_code . ' - ' . wp_remote_retrieve_body($response));
+        return false;
+    }
+    
+    // Get the image content directly from the API response
+    $image_data = wp_remote_retrieve_body($response);
+    
+    if (empty($image_data)) {
+        error_log('Google Places Directory: Empty image data received');
         return false;
     }
     
     // Generate a unique filename
-    $filename = sanitize_file_name( $business_name . '-' . substr( $photo_reference, -8 ) . '.jpg' );
+    $filename = sanitize_file_name($business_name . '-' . substr(md5($photo_reference), 0, 8) . '.jpg');
+    
+    // Create a temporary file 
+    $upload_dir = wp_upload_dir();
+    $tmp_file = $upload_dir['basedir'] . '/gpd-temp-' . md5($filename) . '.jpg';
+    
+    // Write image data to temporary file
+    if (file_put_contents($tmp_file, $image_data) === false) {
+        error_log('Google Places Directory: Failed to write temporary image file');
+        return false;
+    }
+    
+    // Check if file is valid image
+    if (filesize($tmp_file) < 100) {
+        @unlink($tmp_file);
+        error_log('Google Places Directory: Invalid image file - too small');
+        return false;
+    }
     
     $file_array = array(
         'name' => $filename,
-        'tmp_name' => $tmp,
+        'tmp_name' => $tmp_file,
     );
     
     // Upload and attach the image
-    $attachment_id = media_handle_sideload( $file_array, $post_id, $business_name . ' - ' . __( 'Google Places Photo', 'google-places-directory' ) );
+    $attachment_id = media_handle_sideload($file_array, $post_id, $business_name . ' - ' . __('Google Places Photo', 'google-places-directory'));
     
     // Remove temporary file
-    @unlink( $tmp );
+    @unlink($tmp_file);
     
-    if ( is_wp_error( $attachment_id ) ) {
+    if (is_wp_error($attachment_id)) {
         error_log('Google Places Directory: Failed to create attachment - ' . $attachment_id->get_error_message());
         return false;
     }
     
     // Store photo reference as attachment meta
-    update_post_meta( $attachment_id, '_gpd_photo_reference', $photo_reference );
+    update_post_meta($attachment_id, '_gpd_photo_reference', $photo_reference);
     
     return $attachment_id;
 }
