@@ -2,12 +2,12 @@
 /**
  * Class GPD_Shortcodes
  *
- * Handles shortcodes for displaying business photos and information
+ * Handles all shortcodes for the Google Places Directory plugin.
  * 
- * @since 2.3.0
+ * @since 2.5.0
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
+if (!defined('ABSPATH')) {
     exit;
 }
 
@@ -15,450 +15,548 @@ class GPD_Shortcodes {
     private static $instance = null;
 
     public static function instance() {
-        if ( self::$instance === null ) {
+        if (self::$instance === null) {
             self::$instance = new self();
-            self::$instance->init();
+            self::$instance->init_hooks();
         }
         return self::$instance;
     }
 
-    public function init() {
-        add_shortcode( 'gpd_photos', array( $this, 'photos_shortcode' ) );
-        add_shortcode( 'gpd_business', array( $this, 'business_shortcode' ) );
+    private function init_hooks() {
+        // Register shortcodes
+        add_shortcode('gpd-photos', array($this, 'photos_shortcode'));
+        add_shortcode('gpd-business-search', array($this, 'business_search_shortcode'));
+        add_shortcode('gpd-business-map', array($this, 'business_map_shortcode'));
         
-        // Register styles for the frontend
-        add_action( 'wp_enqueue_scripts', array( $this, 'register_styles' ) );
+        // Enqueue scripts and styles
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
     }
-    
+
     /**
-     * Register frontend styles
+     * Enqueue required assets for shortcodes
      */
-    public function register_styles() {
-        // Register CSS
+    public function enqueue_assets() {
+        // Register styles
         wp_register_style(
             'gpd-frontend', 
-            plugin_dir_url( dirname( __FILE__ ) ) . 'assets/css/frontend.css',
+            plugin_dir_url(__FILE__) . '../assets/css/gpd-frontend.css',
             array(),
-            defined('GPD_VERSION') ? GPD_VERSION : '2.3.0'
+            '2.5.0'
         );
         
-        // Register JS for slider functionality
+        // Register scripts
+        wp_register_script(
+            'gpd-lightbox',
+            plugin_dir_url(__FILE__) . '../assets/js/gpd-lightbox.js',
+            array('jquery'),
+            '2.5.0',
+            true
+        );
+        
         wp_register_script(
             'gpd-frontend',
-            plugin_dir_url( dirname( __FILE__ ) ) . 'assets/js/frontend.js',
-            array('jquery'),
-            defined('GPD_VERSION') ? GPD_VERSION : '2.3.0',
+            plugin_dir_url(__FILE__) . '../assets/js/gpd-frontend.js',
+            array('jquery', 'gpd-lightbox'),
+            '2.5.0',
             true
         );
     }
 
     /**
-     * Shortcode to display business photos
-     *
+     * Photo gallery shortcode
+     * 
      * @param array $atts Shortcode attributes
      * @return string HTML output
      */
-    public function photos_shortcode( $atts ) {
-        $atts = shortcode_atts( array(
-            'id' => 0,
-            'business' => '',
-            'layout' => 'grid', // grid, slider, masonry
-            'size' => 'medium', // thumbnail, medium, large, full
-            'limit' => 10,
-            'lightbox' => 'yes', // yes, no - whether to enable lightbox
-        ), $atts, 'gpd_photos' );
-
-        // Get post ID either from ID parameter or by business name
-        $post_id = $this->get_business_id( $atts );
+    public function photos_shortcode($atts) {
+        // Enqueue required assets
+        wp_enqueue_style('gpd-frontend');
+        wp_enqueue_script('gpd-lightbox');
+        wp_enqueue_script('gpd-frontend');
         
-        if ( ! $post_id ) {
-            return '<p class="gpd-error">' . __( 'Business not found', 'google-places-directory' ) . '</p>';
-        }
-
-        // Get photo references from post meta
-        $photo_refs = get_post_meta( $post_id, '_gpd_photo_references', true );
+        // Extract attributes and set defaults
+        $atts = shortcode_atts(array(
+            'id' => 0,                   // Business ID (defaults to current post)
+            'layout' => 'grid',          // Options: grid, masonry, carousel
+            'columns' => 3,              // Number of columns for grid layout
+            'limit' => 0,                // Max number of photos (0 = all)
+            'size' => 'medium',          // Image size: thumbnail, medium, large, full
+            'show_caption' => 'false',   // Show captions
+            'class' => '',               // Custom CSS class
+        ), $atts, 'gpd-photos');
         
-        if ( empty( $photo_refs ) ) {
-            return '<p class="gpd-notice">' . __( 'No photos available for this business', 'google-places-directory' ) . '</p>';
-        }
-
-        // Get attachments based on stored references
-        $attachments = array();
-        foreach ( $photo_refs as $ref ) {
-            $args = array(
-                'post_type' => 'attachment',
-                'posts_per_page' => 1,
-                'meta_key' => '_gpd_photo_reference',
-                'meta_value' => $ref,
-                'post_status' => 'any',
-            );
-            
-            $query = new WP_Query( $args );
-            
-            if ( $query->have_posts() ) {
-                $attachments[] = $query->posts[0]->ID;
-            }
-            
-            // Limit to specified number
-            if ( count( $attachments ) >= intval( $atts['limit'] ) ) {
-                break;
-            }
+        // Convert string to boolean for show_caption
+        $atts['show_caption'] = filter_var($atts['show_caption'], FILTER_VALIDATE_BOOLEAN);
+        
+        // Get business ID
+        $business_id = intval($atts['id']);
+        if ($business_id === 0) {
+            $business_id = get_the_ID();
         }
         
-        // Return early if no attachments found
-        if ( empty( $attachments ) ) {
-            return '<p class="gpd-notice">' . __( 'No photos available for this business', 'google-places-directory' ) . '</p>';
+        // Check if this is a business
+        if (!$business_id || get_post_type($business_id) !== 'business') {
+            return '<p class="gpd-error">' . __('No business found to display photos.', 'google-places-directory') . '</p>';
         }
         
-        // Enqueue stylesheet
-        wp_enqueue_style( 'gpd-frontend' );
+        // Get photos
+        $photo_refs = get_post_meta($business_id, '_gpd_photo_references', true);
+        if (!is_array($photo_refs) || empty($photo_refs)) {
+            return '<p class="gpd-no-photos">' . __('No photos available for this business.', 'google-places-directory') . '</p>';
+        }
         
-        // Generate unique ID for this gallery
-        $gallery_id = 'gpd-photos-' . uniqid();
+        // Query for photo attachments
+        $args = array(
+            'post_type' => 'attachment',
+            'posts_per_page' => intval($atts['limit']) > 0 ? intval($atts['limit']) : -1,
+            'meta_query' => array(
+                array(
+                    'key' => '_gpd_photo_reference',
+                    'value' => $photo_refs,
+                    'compare' => 'IN',
+                ),
+            ),
+            'orderby' => 'post__in',
+            'post_status' => 'inherit',
+        );
         
-        // Begin output
-        $output = '<div id="' . esc_attr($gallery_id) . '" class="gpd-photos gpd-layout-' . esc_attr( $atts['layout'] ) . '">';
+        $photos = get_posts($args);
         
-        // Generate gallery based on layout type
-        switch ( $atts['layout'] ) {
-            case 'slider':
-                $output .= $this->generate_slider( $attachments, $atts['size'], $gallery_id );
-                // Enqueue slider JavaScript
-                wp_enqueue_script( 'gpd-frontend' );
+        if (empty($photos)) {
+            return '<p class="gpd-no-photos">' . __('No photos available for this business.', 'google-places-directory') . '</p>';
+        }
+        
+        // Build CSS classes
+        $css_classes = array(
+            'gpd-photos-gallery',
+            'gpd-layout-' . sanitize_html_class($atts['layout']),
+            'gpd-columns-' . intval($atts['columns'])
+        );
+        
+        if (!empty($atts['class'])) {
+            $css_classes[] = sanitize_html_class($atts['class']);
+        }
+        
+        // Start output buffering
+        ob_start();
+        
+        // Output container
+        echo '<div class="' . esc_attr(implode(' ', $css_classes)) . '" data-layout="' . esc_attr($atts['layout']) . '">';
+        
+        // Different layouts
+        switch ($atts['layout']) {
+            case 'carousel':
+                $this->render_carousel_layout($photos, $atts);
                 break;
                 
             case 'masonry':
-                $output .= $this->generate_masonry( $attachments, $atts['size'], $atts['lightbox'] === 'yes' );
-                if ($atts['lightbox'] === 'yes') {
-                    // Add lightbox functionality when enabled
-                    $output .= $this->add_lightbox_support($gallery_id);
-                }
+                $this->render_masonry_layout($photos, $atts);
                 break;
                 
             case 'grid':
             default:
-                $output .= $this->generate_grid( $attachments, $atts['size'], $atts['lightbox'] === 'yes' );
-                if ($atts['lightbox'] === 'yes') {
-                    // Add lightbox functionality when enabled
-                    $output .= $this->add_lightbox_support($gallery_id);
-                }
+                $this->render_grid_layout($photos, $atts);
                 break;
         }
         
-        $output .= '</div>';
+        echo '</div>';
         
-        return $output;
+        // Return the buffered output
+        return ob_get_clean();
     }
     
     /**
-     * Shortcode to display business information with photos
-     *
+     * Render grid layout for photos
+     * 
+     * @param array $photos Array of attachment posts
+     * @param array $atts Shortcode attributes
+     */
+    private function render_grid_layout($photos, $atts) {
+        echo '<div class="gpd-grid-container">';
+        foreach ($photos as $photo) {
+            $full_img_url = wp_get_attachment_image_url($photo->ID, 'full');
+            $display_img_url = wp_get_attachment_image_url($photo->ID, $atts['size']);
+            $caption = '';
+            
+            if ($atts['show_caption']) {
+                $caption = $photo->post_excerpt ?: $photo->post_title;
+            }
+            
+            echo '<div class="gpd-grid-item">';
+            echo '<a href="' . esc_url($full_img_url) . '" class="gpd-lightbox" data-caption="' . esc_attr($caption) . '">';
+            echo '<img src="' . esc_url($display_img_url) . '" alt="' . esc_attr($photo->post_title) . '" loading="lazy">';
+            echo '</a>';
+            
+            if ($atts['show_caption'] && !empty($caption)) {
+                echo '<div class="gpd-caption">' . esc_html($caption) . '</div>';
+            }
+            
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+    
+    /**
+     * Render masonry layout for photos
+     * 
+     * @param array $photos Array of attachment posts
+     * @param array $atts Shortcode attributes
+     */
+    private function render_masonry_layout($photos, $atts) {
+        echo '<div class="gpd-masonry-container">';
+        foreach ($photos as $photo) {
+            $full_img_url = wp_get_attachment_image_url($photo->ID, 'full');
+            $display_img_url = wp_get_attachment_image_url($photo->ID, $atts['size']);
+            $caption = '';
+            
+            if ($atts['show_caption']) {
+                $caption = $photo->post_excerpt ?: $photo->post_title;
+            }
+            
+            // Get image dimensions for proper masonry sizing
+            $img_meta = wp_get_attachment_metadata($photo->ID);
+            $aspect_ratio = 1;
+            if (isset($img_meta['width']) && isset($img_meta['height']) && $img_meta['width'] > 0) {
+                $aspect_ratio = $img_meta['height'] / $img_meta['width'];
+            }
+            
+            echo '<div class="gpd-masonry-item" style="--aspect-ratio:' . esc_attr($aspect_ratio) . '">';
+            echo '<a href="' . esc_url($full_img_url) . '" class="gpd-lightbox" data-caption="' . esc_attr($caption) . '">';
+            echo '<img src="' . esc_url($display_img_url) . '" alt="' . esc_attr($photo->post_title) . '" loading="lazy">';
+            echo '</a>';
+            
+            if ($atts['show_caption'] && !empty($caption)) {
+                echo '<div class="gpd-caption">' . esc_html($caption) . '</div>';
+            }
+            
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+    
+    /**
+     * Render carousel layout for photos
+     * 
+     * @param array $photos Array of attachment posts
+     * @param array $atts Shortcode attributes
+     */
+    private function render_carousel_layout($photos, $atts) {
+        echo '<div class="gpd-carousel-container">';
+        echo '<div class="gpd-carousel-track">';
+        
+        foreach ($photos as $photo) {
+            $full_img_url = wp_get_attachment_image_url($photo->ID, 'full');
+            $display_img_url = wp_get_attachment_image_url($photo->ID, $atts['size']);
+            $caption = '';
+            
+            if ($atts['show_caption']) {
+                $caption = $photo->post_excerpt ?: $photo->post_title;
+            }
+            
+            echo '<div class="gpd-carousel-slide">';
+            echo '<a href="' . esc_url($full_img_url) . '" class="gpd-lightbox" data-caption="' . esc_attr($caption) . '">';
+            echo '<img src="' . esc_url($display_img_url) . '" alt="' . esc_attr($photo->post_title) . '" loading="lazy">';
+            echo '</a>';
+            
+            if ($atts['show_caption'] && !empty($caption)) {
+                echo '<div class="gpd-caption">' . esc_html($caption) . '</div>';
+            }
+            
+            echo '</div>';
+        }
+        
+        echo '</div>'; // End track
+        
+        // Navigation arrows
+        echo '<button class="gpd-carousel-prev" aria-label="' . esc_attr__('Previous', 'google-places-directory') . '">&#10094;</button>';
+        echo '<button class="gpd-carousel-next" aria-label="' . esc_attr__('Next', 'google-places-directory') . '">&#10095;</button>';
+        
+        echo '</div>'; // End container
+    }
+
+    /**
+     * Business search shortcode
+     * 
      * @param array $atts Shortcode attributes
      * @return string HTML output
      */
-    public function business_shortcode( $atts ) {
-        $atts = shortcode_atts( array(
-            'id' => 0,
-            'business' => '',
-            'show_photos' => 'yes', // yes, no
-            'show_map' => 'yes', // yes, no
-            'photo_size' => 'medium', // thumbnail, medium, large, full
-            'layout' => 'card', // card, details
-            'photo_layout' => 'grid', // grid, slider, masonry
-            'lightbox' => 'yes', // yes, no
-        ), $atts, 'gpd_business' );
+    public function business_search_shortcode($atts) {
+        // Enqueue required assets
+        wp_enqueue_style('gpd-frontend');
+        wp_enqueue_script('gpd-frontend');
         
-        // Get post ID either from ID parameter or by business name
-        $post_id = $this->get_business_id( $atts );
+        // Extract attributes and set defaults
+        $atts = shortcode_atts(array(
+            'show_map' => 'false',        // Show map with results
+            'location_search' => 'true',   // Enable location-based search
+            'results_page' => '',          // URL to results page (leave empty for AJAX results)
+            'default_radius' => 25,        // Default search radius in km
+            'default_limit' => 10,         // Default number of results
+            'placeholder' => __('Search for businesses...', 'google-places-directory'),
+            'class' => '',                 // Custom CSS class
+        ), $atts, 'gpd-business-search');
         
-        if ( ! $post_id ) {
-            return '<p class="gpd-error">' . __( 'Business not found', 'google-places-directory' ) . '</p>';
+        // Convert string attributes to proper types
+        $atts['show_map'] = filter_var($atts['show_map'], FILTER_VALIDATE_BOOLEAN);
+        $atts['location_search'] = filter_var($atts['location_search'], FILTER_VALIDATE_BOOLEAN);
+        
+        // Build CSS classes
+        $css_classes = array('gpd-business-search-form');
+        
+        if (!empty($atts['class'])) {
+            $css_classes[] = sanitize_html_class($atts['class']);
+        }
+        
+        // Start output buffering
+        ob_start();
+        
+        // Search form
+        ?>
+        <div class="<?php echo esc_attr(implode(' ', $css_classes)); ?>">
+            <form action="<?php echo esc_url($atts['results_page'] ? $atts['results_page'] : '#'); ?>" method="get" class="gpd-search-form">
+                <?php if (empty($atts['results_page'])): ?>
+                    <input type="hidden" name="gpd_ajax_search" value="1">
+                <?php endif; ?>
+                
+                <div class="gpd-search-fields">
+                    <div class="gpd-search-input-wrap">
+                        <input type="text" name="gpd_query" placeholder="<?php echo esc_attr($atts['placeholder']); ?>" required>
+                    </div>
+                    
+                    <?php if ($atts['location_search']): ?>
+                    <div class="gpd-location-wrap">
+                        <button type="button" class="gpd-location-button" title="<?php esc_attr_e('Use my location', 'google-places-directory'); ?>">
+                            <span class="gpd-icon gpd-icon-location"></span>
+                        </button>
+                        <input type="hidden" name="gpd_lat" value="">
+                        <input type="hidden" name="gpd_lng" value="">
+                    </div>
+                    <?php endif; ?>
+                    
+                    <div class="gpd-search-button-wrap">
+                        <button type="submit" class="gpd-search-button"><?php esc_html_e('Search', 'google-places-directory'); ?></button>
+                    </div>
+                </div>
+                
+                <div class="gpd-search-options">
+                    <div class="gpd-search-radius">
+                        <label for="gpd-radius"><?php esc_html_e('Radius:', 'google-places-directory'); ?></label>
+                        <select name="gpd_radius" id="gpd-radius">
+                            <option value="5"><?php esc_html_e('5 km', 'google-places-directory'); ?></option>
+                            <option value="10"><?php esc_html_e('10 km', 'google-places-directory'); ?></option>
+                            <option value="25" selected><?php esc_html_e('25 km', 'google-places-directory'); ?></option>
+                            <option value="50"><?php esc_html_e('50 km', 'google-places-directory'); ?></option>
+                            <option value="100"><?php esc_html_e('100 km', 'google-places-directory'); ?></option>
+                        </select>
+                    </div>
+                    
+                    <div class="gpd-search-limit">
+                        <label for="gpd-limit"><?php esc_html_e('Results:', 'google-places-directory'); ?></label>
+                        <select name="gpd_limit" id="gpd-limit">
+                            <option value="5"><?php esc_html_e('5', 'google-places-directory'); ?></option>
+                            <option value="10" selected><?php esc_html_e('10', 'google-places-directory'); ?></option>
+                            <option value="20"><?php esc_html_e('20', 'google-places-directory'); ?></option>
+                            <option value="50"><?php esc_html_e('50', 'google-places-directory'); ?></option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+            
+            <?php if (empty($atts['results_page'])): ?>
+            <div class="gpd-ajax-results" style="display:none;">
+                <div class="gpd-results-header">
+                    <h3><?php esc_html_e('Search Results', 'google-places-directory'); ?></h3>
+                    <span class="gpd-results-count"></span>
+                </div>
+                
+                <?php if ($atts['show_map']): ?>
+                <div class="gpd-results-map" id="gpd-results-map"></div>
+                <?php endif; ?>
+                
+                <div class="gpd-results-list"></div>
+                <div class="gpd-results-loading" style="display:none;">
+                    <div class="gpd-spinner"></div>
+                    <p><?php esc_html_e('Searching...', 'google-places-directory'); ?></p>
+                </div>
+                <div class="gpd-results-error" style="display:none;"></div>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php
+        
+        // Return the buffered output
+        return ob_get_clean();
+    }
+
+    /**
+     * Business map shortcode
+     * 
+     * @param array $atts Shortcode attributes
+     * @return string HTML output
+     */
+    public function business_map_shortcode($atts) {
+        // Enqueue required assets
+        wp_enqueue_style('gpd-frontend');
+        wp_enqueue_script('gpd-frontend');
+        
+        // Extract attributes and set defaults
+        $atts = shortcode_atts(array(
+            'id' => 0,                   // Single business ID (defaults to current post)
+            'category' => '',            // Filter by category slug
+            'limit' => 100,              // Max number of businesses to show
+            'height' => '400px',         // Map height
+            'zoom' => 14,                // Default zoom level
+            'clustering' => 'true',      // Use marker clustering
+            'class' => '',               // Custom CSS class
+        ), $atts, 'gpd-business-map');
+        
+        // Convert string attributes to proper types
+        $atts['clustering'] = filter_var($atts['clustering'], FILTER_VALIDATE_BOOLEAN);
+        
+        // Generate unique ID for this map
+        $map_id = 'gpd-map-' . uniqid();
+        
+        // Build CSS classes
+        $css_classes = array('gpd-business-map');
+        
+        if (!empty($atts['class'])) {
+            $css_classes[] = sanitize_html_class($atts['class']);
         }
         
         // Get business data
-        $business_name = get_the_title( $post_id );
-        $address = get_post_meta( $post_id, '_gpd_address', true );
-        $phone = get_post_meta( $post_id, '_gpd_phone_number', true );
-        $website = get_post_meta( $post_id, '_gpd_website', true );
-        $rating = get_post_meta( $post_id, '_gpd_rating', true );
-        $lat = get_post_meta( $post_id, '_gpd_latitude', true );
-        $lng = get_post_meta( $post_id, '_gpd_longitude', true );
-        $maps_uri = get_post_meta( $post_id, '_gpd_maps_uri', true );
+        $businesses = array();
+        $center_lat = 0;
+        $center_lng = 0;
         
-        // Enqueue stylesheet
-        wp_enqueue_style( 'gpd-frontend' );
-        
-        // Begin output
-        $output = '<div class="gpd-business gpd-layout-' . esc_attr( $atts['layout'] ) . '">';
-        
-        // Business header
-        $output .= '<div class="gpd-business-header">';
-        $output .= '<h3 class="gpd-business-name">' . esc_html( $business_name ) . '</h3>';
-        
-        if ( ! empty( $rating ) ) {
-            $output .= '<div class="gpd-business-rating">';
-            $output .= '<span class="gpd-rating-value">' . number_format( (float) $rating, 1 ) . '</span>';
-            $output .= '<span class="gpd-rating-stars">';
-            $full_stars = floor( $rating );
-            $half_star = ( $rating - $full_stars ) >= 0.5;
+        // Single business mode
+        if (intval($atts['id']) > 0) {
+            $business_id = intval($atts['id']);
+            $lat = get_post_meta($business_id, '_gpd_latitude', true);
+            $lng = get_post_meta($business_id, '_gpd_longitude', true);
             
-            for ( $i = 1; $i <= 5; $i++ ) {
-                if ( $i <= $full_stars ) {
-                    $output .= '<span class="gpd-star gpd-star-full">★</span>';
-                } elseif ( $half_star && $i === $full_stars + 1 ) {
-                    $output .= '<span class="gpd-star gpd-star-half">★</span>';
+            if ($lat && $lng) {
+                $businesses[] = array(
+                    'id' => $business_id,
+                    'title' => get_the_title($business_id),
+                    'lat' => $lat,
+                    'lng' => $lng,
+                    'url' => get_permalink($business_id),
+                    'address' => get_post_meta($business_id, '_gpd_address', true),
+                    'thumbnail' => get_the_post_thumbnail_url($business_id, 'thumbnail'),
+                );
+                
+                $center_lat = $lat;
+                $center_lng = $lng;
+            }
+        }
+        // Multiple businesses mode
+        else {
+            $args = array(
+                'post_type' => 'business',
+                'posts_per_page' => intval($atts['limit']),
+                'meta_query' => array(
+                    'relation' => 'AND',
+                    array(
+                        'key' => '_gpd_latitude',
+                        'compare' => 'EXISTS',
+                    ),
+                    array(
+                        'key' => '_gpd_longitude',
+                        'compare' => 'EXISTS',
+                    ),
+                ),
+            );
+            
+            // Filter by category if specified
+            if (!empty($atts['category'])) {
+                $args['tax_query'] = array(
+                    array(
+                        'taxonomy' => 'business_category',
+                        'field' => 'slug',
+                        'terms' => sanitize_title($atts['category']),
+                    ),
+                );
+            }
+            
+            $query = new WP_Query($args);
+            
+            if ($query->have_posts()) {
+                $lat_sum = 0;
+                $lng_sum = 0;
+                $count = 0;
+                
+                while ($query->have_posts()) {
+                    $query->the_post();
+                    $business_id = get_the_ID();
+                    $lat = get_post_meta($business_id, '_gpd_latitude', true);
+                    $lng = get_post_meta($business_id, '_gpd_longitude', true);
+                    
+                    if ($lat && $lng) {
+                        $businesses[] = array(
+                            'id' => $business_id,
+                            'title' => get_the_title(),
+                            'lat' => $lat,
+                            'lng' => $lng,
+                            'url' => get_permalink(),
+                            'address' => get_post_meta($business_id, '_gpd_address', true),
+                            'thumbnail' => get_the_post_thumbnail_url($business_id, 'thumbnail'),
+                        );
+                        
+                        $lat_sum += (float) $lat;
+                        $lng_sum += (float) $lng;
+                        $count++;
+                    }
+                }
+                
+                wp_reset_postdata();
+                
+                if ($count > 0) {
+                    $center_lat = $lat_sum / $count;
+                    $center_lng = $lng_sum / $count;
+                }
+            }
+        }
+        
+        // No businesses with coordinates found
+        if (empty($businesses)) {
+            return '<p class="gpd-error">' . __('No businesses with location data found.', 'google-places-directory') . '</p>';
+        }
+        
+        // Start output buffering
+        ob_start();
+        
+        // Output map container
+        ?>
+        <div class="<?php echo esc_attr(implode(' ', $css_classes)); ?>">
+            <div id="<?php echo esc_attr($map_id); ?>" class="gpd-map-canvas" style="height:<?php echo esc_attr($atts['height']); ?>;"></div>
+        </div>
+        
+        <script type="text/javascript">
+        (function() {
+            // Initialize the map once the DOM is ready
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof gpdInitMap === 'function') {
+                    gpdInitMap('<?php echo esc_js($map_id); ?>', {
+                        center: {
+                            lat: <?php echo floatval($center_lat); ?>,
+                            lng: <?php echo floatval($center_lng); ?>
+                        },
+                        zoom: <?php echo intval($atts['zoom']); ?>,
+                        clustering: <?php echo $atts['clustering'] ? 'true' : 'false'; ?>,
+                        businesses: <?php echo json_encode($businesses); ?>
+                    });
                 } else {
-                    $output .= '<span class="gpd-star gpd-star-empty">☆</span>';
-                }
-            }
-            $output .= '</span>';
-            $output .= '</div>';
-        }
-        $output .= '</div>';
-        
-        // Photos section
-        if ( $atts['show_photos'] === 'yes' ) {
-            $photo_shortcode = sprintf(
-                '[gpd_photos id="%d" layout="%s" size="%s" limit="3" lightbox="%s"]', 
-                $post_id, 
-                $atts['photo_layout'],
-                $atts['photo_size'],
-                $atts['lightbox']
-            );
-            $output .= do_shortcode( $photo_shortcode );
-        }
-        
-        // Business details
-        $output .= '<div class="gpd-business-details">';
-        if ( ! empty( $address ) ) {
-            $output .= '<div class="gpd-business-address">';
-            $output .= '<span class="gpd-icon">📍</span>';
-            if ( ! empty( $maps_uri ) ) {
-                $output .= '<a href="' . esc_url( $maps_uri ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $address ) . '</a>';
-            } else {
-                $output .= esc_html( $address );
-            }
-            $output .= '</div>';
-        }
-        
-        if ( ! empty( $phone ) ) {
-            $output .= '<div class="gpd-business-phone">';
-            $output .= '<span class="gpd-icon">📞</span>';
-            $output .= '<a href="tel:' . esc_attr( preg_replace( '/[^0-9+]/', '', $phone ) ) . '">' . esc_html( $phone ) . '</a>';
-            $output .= '</div>';
-        }
-        
-        if ( ! empty( $website ) ) {
-            $output .= '<div class="gpd-business-website">';
-            $output .= '<span class="gpd-icon">🌐</span>';
-            $output .= '<a href="' . esc_url( $website ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( preg_replace( '#^https?://#', '', $website ) ) . '</a>';
-            $output .= '</div>';
-        }
-        $output .= '</div>';
-        
-        // Map section
-        if ( $atts['show_map'] === 'yes' && ! empty( $lat ) && ! empty( $lng ) ) {
-            $api_key = get_option( 'gpd_api_key' );
-            if ( ! empty( $api_key ) ) {
-                $output .= '<div class="gpd-business-map">';
-                $output .= '<iframe 
-                    width="100%" 
-                    height="250" 
-                    frameborder="0" 
-                    style="border:0" 
-                    src="https://www.google.com/maps/embed/v1/place?key=' . esc_attr( $api_key ) . '&q=' . esc_attr( urlencode( $business_name . ' ' . $address ) ) . '&center=' . esc_attr( $lat ) . ',' . esc_attr( $lng ) . '&zoom=15" 
-                    allowfullscreen>
-                </iframe>';
-                $output .= '</div>';
-            }
-        }
-        
-        $output .= '<div class="gpd-attribution">' . __( 'Business data from Google Places', 'google-places-directory' ) . '</div>';
-        $output .= '</div>';
-        
-        return $output;
-    }
-    
-    /**
-     * Find business ID by name or ID
-     *
-     * @param array $atts Shortcode attributes
-     * @return int|false Post ID or false if not found
-     */
-    private function get_business_id( $atts ) {
-        if ( ! empty( $atts['id'] ) && is_numeric( $atts['id'] ) ) {
-            return absint( $atts['id'] );
-        }
-        
-        if ( ! empty( $atts['business'] ) ) {
-            // Try to find by exact name first
-            $args = array(
-                'post_type' => 'business',
-                'posts_per_page' => 1,
-                'title' => $atts['business'],
-                'fields' => 'ids',
-            );
-            
-            $query = new WP_Query( $args );
-            
-            if ( $query->have_posts() ) {
-                return $query->posts[0];
-            }
-            
-            // Try with LIKE search
-            $args = array(
-                'post_type' => 'business',
-                'posts_per_page' => 1,
-                's' => $atts['business'],
-                'fields' => 'ids',
-            );
-            
-            $query = new WP_Query( $args );
-            
-            if ( $query->have_posts() ) {
-                return $query->posts[0];
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Generate a grid layout for photos
-     *
-     * @param array $attachments Attachment IDs
-     * @param string $size Image size
-     * @param bool $lightbox Whether to enable lightbox functionality
-     * @return string HTML output
-     */
-    private function generate_grid( $attachments, $size, $lightbox = true ) {
-        $output = '<div class="gpd-photo-grid">';
-        
-        foreach ( $attachments as $id ) {
-            $image = wp_get_attachment_image( $id, $size );
-            $full_image_url = wp_get_attachment_url( $id );
-            $caption = wp_get_attachment_caption( $id ) ?: '';
-            
-            $output .= '<div class="gpd-photo-item">';
-            if ( $lightbox ) {
-                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" data-lightbox="gpd-gallery" data-title="' . esc_attr( $caption ) . '">';
-            } else {
-                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" target="_blank">';
-            }
-            $output .= $image;
-            $output .= '</a>';
-            $output .= '</div>';
-        }
-        
-        $output .= '</div>';
-        
-        return $output;
-    }
-    
-    /**
-     * Generate a slider layout for photos
-     *
-     * @param array $attachments Attachment IDs
-     * @param string $size Image size
-     * @param string $slider_id Unique ID for slider
-     * @return string HTML output
-     */
-    private function generate_slider( $attachments, $size, $slider_id ) {
-        $output = '<div class="gpd-photo-slider" data-slider-id="' . esc_attr($slider_id) . '">';
-        $output .= '<div class="gpd-slider-track">';
-        
-        foreach ( $attachments as $id ) {
-            $image = wp_get_attachment_image( $id, $size );
-            $full_image_url = wp_get_attachment_url( $id );
-            
-            $output .= '<div class="gpd-slider-item">';
-            $output .= '<a href="' . esc_url( $full_image_url ) . '" target="_blank">';
-            $output .= $image;
-            $output .= '</a>';
-            $output .= '</div>';
-        }
-        
-        $output .= '</div>';
-        
-        if ( count( $attachments ) > 1 ) {
-            $output .= '<div class="gpd-slider-controls">';
-            $output .= '<button class="gpd-slider-prev" aria-label="' . esc_attr__('Previous', 'google-places-directory') . '">◀</button>';
-            $output .= '<button class="gpd-slider-next" aria-label="' . esc_attr__('Next', 'google-places-directory') . '">▶</button>';
-            $output .= '</div>';
-            $output .= '<div class="gpd-slider-pagination">';
-            
-            for ($i = 0; $i < count($attachments); $i++) {
-                $active = $i === 0 ? ' gpd-active' : '';
-                $output .= '<span class="gpd-pagination-dot' . $active . '" data-slide="' . $i . '"></span>';
-            }
-            
-            $output .= '</div>';
-        }
-        
-        $output .= '</div>';
-        
-        // Add inline script to initialize this specific slider
-        $output .= '<script>
-            document.addEventListener("DOMContentLoaded", function() {
-                if (typeof gpdInitSlider === "function") {
-                    gpdInitSlider("' . esc_js($slider_id) . '");
+                    console.error('Google Maps initialization function not found');
                 }
             });
-        </script>';
+        })();
+        </script>
+        <?php
         
-        return $output;
-    }
-    
-    /**
-     * Generate a masonry layout for photos
-     *
-     * @param array $attachments Attachment IDs
-     * @param string $size Image size
-     * @param bool $lightbox Whether to enable lightbox functionality
-     * @return string HTML output
-     */
-    private function generate_masonry( $attachments, $size, $lightbox = true ) {
-        $output = '<div class="gpd-photo-masonry">';
-        
-        foreach ( $attachments as $id ) {
-            $image = wp_get_attachment_image( $id, $size );
-            $full_image_url = wp_get_attachment_url( $id );
-            $caption = wp_get_attachment_caption( $id ) ?: '';
-            
-            $output .= '<div class="gpd-photo-item">';
-            if ( $lightbox ) {
-                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" data-lightbox="gpd-gallery" data-title="' . esc_attr( $caption ) . '">';
-            } else {
-                $output .= '<a href="' . esc_url( $full_image_url ) . '" class="gpd-photo-link" target="_blank">';
-            }
-            $output .= $image;
-            $output .= '</a>';
-            $output .= '</div>';
-        }
-        
-        $output .= '</div>';
-        
-        return $output;
-    }
-    
-    /**
-     * Add lightbox support for a gallery
-     * 
-     * @param string $gallery_id Unique ID for this gallery
-     * @return string Inline JavaScript to initialize lightbox
-     */
-    private function add_lightbox_support($gallery_id) {
-        // Enqueue lightbox script - this would need to be created separately or use a third-party library
-        wp_enqueue_script('gpd-lightbox');
-        wp_enqueue_style('gpd-lightbox');
-        
-        // Add inline JavaScript to initialize the lightbox for this gallery
-        return '<script>
-            document.addEventListener("DOMContentLoaded", function() {
-                if (typeof gpdInitLightbox === "function") {
-                    gpdInitLightbox("#' . esc_js($gallery_id) . '");
-                }
-            });
-        </script>';
+        // Return the buffered output
+        return ob_get_clean();
     }
 }
+
+// Initialize the shortcodes
+GPD_Shortcodes::instance();
