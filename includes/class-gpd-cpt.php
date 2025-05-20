@@ -5,6 +5,8 @@
  * Defines the Business CPT and Region/Destination taxonomies.
  * Registers custom meta fields for the Business CPT.
  * Adds taxonomy filters to the Business CPT admin list.
+ * 
+ * Updated for Google Places API (New) in May 2025
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -20,6 +22,10 @@ class GPD_CPT {
             add_action( 'init', [ $instance, 'register_custom_meta' ], 1 ); // Ensure CPT exists before registering meta for it
             add_filter( 'content_save_pre', [ $instance, 'allow_html_for_business_cpt' ] );
             add_action( 'restrict_manage_posts', [ $instance, 'add_taxonomy_filters' ] );
+            
+            // Add business data to admin columns
+            add_filter( 'manage_business_posts_columns', [ $instance, 'add_business_columns' ] );
+            add_action( 'manage_business_posts_custom_column', [ $instance, 'render_business_column' ], 10, 2 );
         }
         return $instance;
     }
@@ -31,19 +37,29 @@ class GPD_CPT {
             'singular_name'      => __( 'Business',   'google-places-directory' ),
             'menu_name'          => __( 'Businesses', 'google-places-directory' ),
             'name_admin_bar'     => __( 'Business',   'google-places-directory' ),
+            'add_new'            => __( 'Add New', 'google-places-directory' ),
+            'add_new_item'       => __( 'Add New Business', 'google-places-directory' ),
+            'edit_item'          => __( 'Edit Business', 'google-places-directory' ),
+            'new_item'           => __( 'New Business', 'google-places-directory' ),
+            'view_item'          => __( 'View Business', 'google-places-directory' ),
+            'search_items'       => __( 'Search Businesses', 'google-places-directory' ),
+            'not_found'          => __( 'No businesses found', 'google-places-directory' ),
+            'not_found_in_trash' => __( 'No businesses found in trash', 'google-places-directory' ),
         ];
 
         $args = [
-            'labels'        => $labels,
-            'public'        => true,
-            'show_ui'       => true,
-            'show_in_menu'  => true,
-            'menu_icon'     => 'dashicons-store',
-            'supports'      => [ 'title', 'editor', 'custom-fields' ],
-            'taxonomies'    => [ 'region', 'destination' ],
-            'has_archive'   => false,
-            'rewrite'       => [ 'slug' => 'business' ],
-            'show_in_rest'  => true, // Make CPT available in REST API
+            'labels'             => $labels,
+            'public'             => true,
+            'show_ui'            => true,
+            'show_in_menu'       => true,
+            'menu_icon'          => 'dashicons-store',
+            'supports'           => [ 'title', 'editor', 'custom-fields', 'thumbnail' ],
+            'taxonomies'         => [ 'region', 'destination' ],
+            'has_archive'        => false,
+            'rewrite'            => [ 'slug' => 'business' ],
+            'show_in_rest'       => true, // Make CPT available in REST API
+            'capability_type'    => 'post',
+            'menu_position'      => 5,
         ];
         register_post_type( 'business', $args );
 
@@ -52,6 +68,13 @@ class GPD_CPT {
             'labels'            => [
                 'name'          => __( 'Destinations', 'google-places-directory' ),
                 'singular_name' => __( 'Destination',  'google-places-directory' ),
+                'search_items'  => __( 'Search Destinations', 'google-places-directory' ),
+                'all_items'     => __( 'All Destinations', 'google-places-directory' ),
+                'edit_item'     => __( 'Edit Destination', 'google-places-directory' ),
+                'update_item'   => __( 'Update Destination', 'google-places-directory' ),
+                'add_new_item'  => __( 'Add New Destination', 'google-places-directory' ),
+                'new_item_name' => __( 'New Destination Name', 'google-places-directory' ),
+                'menu_name'     => __( 'Destinations', 'google-places-directory' ),
             ],
             'hierarchical'      => true,
             'public'            => true,
@@ -67,6 +90,13 @@ class GPD_CPT {
             'labels'            => [
                 'name'          => __( 'Regions', 'google-places-directory' ),
                 'singular_name' => __( 'Region',  'google-places-directory' ),
+                'search_items'  => __( 'Search Regions', 'google-places-directory' ),
+                'all_items'     => __( 'All Regions', 'google-places-directory' ),
+                'edit_item'     => __( 'Edit Region', 'google-places-directory' ),
+                'update_item'   => __( 'Update Region', 'google-places-directory' ),
+                'add_new_item'  => __( 'Add New Region', 'google-places-directory' ),
+                'new_item_name' => __( 'New Region Name', 'google-places-directory' ),
+                'menu_name'     => __( 'Regions', 'google-places-directory' ),
             ],
             'hierarchical'      => true,
             'public'            => true,
@@ -76,6 +106,43 @@ class GPD_CPT {
             'show_in_rest'      => true, // Make taxonomy available in REST API
             'show_in_quick_edit' => false,
         ] );
+    }
+
+    /**
+     * Add custom columns to the business post type admin list
+     */
+    public function add_business_columns($columns) {
+        $new_columns = array();
+        
+        // Insert columns after title but before date
+        foreach ($columns as $key => $value) {
+            $new_columns[$key] = $value;
+            
+            if ($key === 'title') {
+                $new_columns['rating'] = __('Rating', 'google-places-directory');
+            }
+        }
+        
+        return $new_columns;
+    }
+    
+    /**
+     * Render content for the custom columns
+     */
+    public function render_business_column($column, $post_id) {
+        switch ($column) {
+            case 'rating':
+                $rating = get_post_meta($post_id, '_gpd_rating', true);
+                if (!empty($rating)) {
+                    echo '<div class="gpd-star-rating">';
+                    echo esc_html(number_format(floatval($rating), 1));
+                    echo ' <span class="dashicons dashicons-star-filled" style="color:#ffb900;"></span>';
+                    echo '</div>';
+                } else {
+                    echo '—';
+                }
+                break;
+        }
     }
 
     /**
@@ -136,6 +203,19 @@ class GPD_CPT {
             </select>
             <?php
         }
+        
+        // Add rating filter
+        $current_rating = isset( $_GET['min_rating'] ) ? floatval( $_GET['min_rating'] ) : 0;
+        ?>
+        <select name="min_rating" id="min_rating_filter">
+            <option value=""><?php esc_html_e( 'Any Rating', 'google-places-directory' ); ?></option>
+            <?php for ( $i = 1; $i <= 5; $i++ ) : ?>
+                <option value="<?php echo esc_attr( $i ); ?>" <?php selected( $current_rating, $i ); ?>>
+                    <?php printf( esc_html__( '%d+ Stars', 'google-places-directory' ), $i ); ?>
+                </option>
+            <?php endfor; ?>
+        </select>
+        <?php
     }
 
     public function register_custom_meta() {
@@ -177,8 +257,7 @@ class GPD_CPT {
                         'items' => [ 'type' => 'string' ],
                     ],
                 ],
-                // If you need to sanitize this when updated outside REST API:
-                // 'sanitize_callback' => [ $this, 'sanitize_array_of_strings' ],
+                'sanitize_callback' => [ $this, 'sanitize_array_of_strings' ],
             ],
             '_gpd_rating'          => [
                 'type'              => 'number',
@@ -193,6 +272,21 @@ class GPD_CPT {
                 'type'              => 'string',
                 'description'       => __('Google Maps URI for the place.', 'google-places-directory'),
                 'sanitize_callback' => 'esc_url_raw',
+            ],
+            '_gpd_website'         => [ // New field
+                'type'              => 'string',
+                'description'       => __('Business website.', 'google-places-directory'),
+                'sanitize_callback' => 'esc_url_raw',
+            ],
+            '_gpd_phone_number'    => [ // New field
+                'type'              => 'string',
+                'description'       => __('Business phone number.', 'google-places-directory'),
+                'sanitize_callback' => 'sanitize_text_field',
+            ],
+            '_gpd_api_version'     => [ // New field to track API version
+                'type'              => 'string',
+                'description'       => __('Google Places API version used for import.', 'google-places-directory'),
+                'sanitize_callback' => 'sanitize_text_field',
             ],
         ];
 
@@ -213,11 +307,65 @@ class GPD_CPT {
         }
     }
 
-    // Example sanitize callback for an array of strings (if needed for _gpd_types for non-REST updates)
-    // public function sanitize_array_of_strings( $value ) {
-    //     if ( ! is_array( $value ) ) {
-    //         return []; // Or null, or apply a default
-    //     }
-    //     return array_map( 'sanitize_text_field', $value );
-    // }
+    /**
+     * Sanitize callback for an array of strings
+     */
+    public function sanitize_array_of_strings($value) {
+        if (!is_array($value)) {
+            return [];
+        }
+        return array_map('sanitize_text_field', $value);
+    }
 }
+
+/**
+ * Add filter to the posts query for business ratings
+ */
+add_filter('parse_query', function($query) {
+    global $pagenow;
+    
+    // Only run in admin on the post list page for business type
+    if (!is_admin() || $pagenow !== 'edit.php' || $query->get('post_type') !== 'business') {
+        return;
+    }
+    
+    // If we have a min_rating filter
+    if (isset($_GET['min_rating']) && !empty($_GET['min_rating'])) {
+        $min_rating = floatval($_GET['min_rating']);
+        
+        // Add meta query
+        $meta_query = $query->get('meta_query');
+        if (!is_array($meta_query)) {
+            $meta_query = [];
+        }
+        
+        $meta_query[] = [
+            'key' => '_gpd_rating',
+            'value' => $min_rating,
+            'compare' => '>=',
+            'type' => 'NUMERIC'
+        ];
+        
+        $query->set('meta_query', $meta_query);
+    }
+    
+    return $query;
+});
+
+/**
+ * Add styling for admin columns
+ */
+add_action('admin_head', function() {
+    $screen = get_current_screen();
+    if (!$screen || $screen->post_type !== 'business') {
+        return;
+    }
+    ?>
+    <style>
+        .gpd-star-rating {
+            display: flex;
+            align-items: center;
+        }
+    </style>
+    <?php
+});
