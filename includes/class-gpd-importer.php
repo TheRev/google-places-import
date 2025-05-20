@@ -89,6 +89,7 @@ class GPD_Importer {
     private function get_place_details( $place_id ) {
         $params = [
             'place_id' => $place_id,
+            // Ensure 'website' is included in fields if you need it for the enhancement plugin
             'fields'   => 'name,formatted_address,address_components,geometry,types,website,international_phone_number,url,rating,business_status',
             'key'      => $this->api_key,
         ];
@@ -107,13 +108,20 @@ class GPD_Importer {
         $created = $updated = 0;
 
         foreach ( $places as $place ) {
-            $place_id = sanitize_text_field( $place['place_id'] ?? '' );
+            $place_id_from_search = sanitize_text_field( $place['place_id'] ?? '' );
+            if ( ! $place_id_from_search ) {
+                continue;
+            }
 
-            // 1. Get full details (guarantees address_components exist)
-            $details = $this->get_place_details( $place_id );
+            // 1. Get full details (guarantees address_components exist and gets potentially more fields)
+            $details = $this->get_place_details( $place_id_from_search );
             if ( ! $details ) {
                 continue;
             }
+            
+            // Use place_id from details response as it's the definitive one
+            $place_id = sanitize_text_field( $details['place_id'] ?? $place_id_from_search );
+
 
             // 2. Extract fields
             $name              = sanitize_text_field( $details['name'] ?? '' );
@@ -125,6 +133,8 @@ class GPD_Importer {
             $rating            = floatval( $details['rating'] ?? 0 );
             $status            = sanitize_text_field( $details['business_status'] ?? '' );
             $maps_url          = esc_url_raw( $details['url'] ?? '' );
+            $website_url       = esc_url_raw( $details['website'] ?? '' ); // Added website extraction
+            $phone_number      = sanitize_text_field( $details['international_phone_number'] ?? '' ); // Added phone extraction
 
             // 3. Parse address_components to find locality (city)
             $locality = '';
@@ -147,6 +157,8 @@ class GPD_Importer {
                 '_gpd_rating'          => $rating,
                 '_gpd_business_status' => $status,
                 '_gpd_maps_uri'        => $maps_url,
+                '_gpd_website'         => $website_url,         // Added website meta
+                '_gpd_phone_number'    => $phone_number,        // Added phone meta
             ];
 
             // 5. Ensure term exists
@@ -155,12 +167,18 @@ class GPD_Importer {
             }
 
             // 6. Check existing post
-            $existing = get_posts([
+            $existing_post_query = new WP_Query([ // Use WP_Query for better practice
                 'post_type'  => 'business',
                 'meta_key'   => '_gpd_place_id',
                 'meta_value' => $place_id,
                 'fields'     => 'ids',
+                'posts_per_page' => 1,
             ]);
+            $existing_post_id = 0;
+            if ( $existing_post_query->have_posts() ) {
+                $existing_post_id = $existing_post_query->posts[0];
+            }
+
 
             // 7. Prepare post data
             $post_data = [
@@ -170,22 +188,42 @@ class GPD_Importer {
                 'meta_input'  => $meta_input,
             ];
 
+            $current_post_id = 0;
+            $is_update = false;
+
             // 8. Insert or update
-            if ( ! empty( $existing ) ) {
-                $post_data['ID'] = $existing[0];
-                wp_update_post( $post_data );
-                $post_id = $existing[0];
-                $updated++;
+            if ( $existing_post_id > 0 ) {
+                $post_data['ID'] = $existing_post_id;
+                $current_post_id = wp_update_post( $post_data, true ); // Pass true to return WP_Error on failure
+                if ( ! is_wp_error( $current_post_id ) ) {
+                    $updated++;
+                    $is_update = true;
+                }
             } else {
-                $post_id = wp_insert_post( $post_data );
-                $created++;
+                $current_post_id = wp_insert_post( $post_data, true ); // Pass true to return WP_Error on failure
+                if ( ! is_wp_error( $current_post_id ) ) {
+                    $created++;
+                }
             }
 
             // 9. Attach term explicitly
-            if ( $locality && ! is_wp_error( $post_id ) ) {
-                wp_set_object_terms( $post_id, $locality, 'destination', false );
-                clean_object_term_cache( $post_id, 'destination' );
+            if ( ! is_wp_error( $current_post_id ) && $current_post_id > 0 && $locality ) {
+                wp_set_object_terms( $current_post_id, $locality, 'destination', false );
+                clean_object_term_cache( $current_post_id, 'destination' );
             }
+
+            // --- ADDED ACTION HOOK ---
+            if ( ! is_wp_error( $current_post_id ) && $current_post_id > 0 ) {
+                /**
+                 * Fires after a business has been successfully imported or updated by GPD_Importer.
+                 *
+                 * @param int   $post_id The ID of the business post that was created or updated.
+                 * @param array $details The full place details array used for the import.
+                 * @param bool  $is_update True if an existing post was updated, false if a new post was created.
+                 */
+                do_action( 'gpd_after_business_processed', $current_post_id, $details, $is_update );
+            }
+            // --- END ADDED ACTION HOOK ---
         }
 
         return [ 'created' => $created, 'updated' => $updated ];
