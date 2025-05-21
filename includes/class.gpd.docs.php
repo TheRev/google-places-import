@@ -3,440 +3,579 @@
  * Class GPD_Docs
  *
  * Provides documentation and help pages for the plugin
- *
+ * 
  * @since 2.3.0
  * @updated 2.5.0
+ * @date 2025-05-20
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-	exit;
+    exit;
 }
 
 class GPD_Docs {
-	private static $instance = null;
+    private static $instance = null;
 
-	public static function instance() {
-		if ( self::$instance === null ) {
-			self::$instance = new self();
-			self::$instance->init_hooks();
-		}
-		return self::$instance;
-	}
+    public static function instance() {
+        if ( self::$instance === null ) {
+            self::$instance = new self();
+            self::$instance->init_hooks();
+        }
+        return self::$instance;
+    }
 
-	private function init_hooks() {
-		add_action( 'admin_menu', array( $this, 'add_docs_pages' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
-	}
+    private function init_hooks() {
+        add_action( 'admin_menu', array( $this, 'add_docs_pages' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
+    }
 
-	/**
-	 * Enqueue styles for the documentation page
-	 */
-	public function enqueue_styles( $hook ) {
-		if ( $hook === 'business_page_gpd-docs' ) {
-			wp_enqueue_style( 'gpd-admin-styles', plugin_dir_url( __FILE__ ) . '../assets/admin-style.css' );
+    /**
+     * Enqueue styles for the documentation page
+     */
+    public function enqueue_styles($hook) {
+        if ($hook === 'business_page_gpd-docs') {
+            wp_enqueue_style('gpd-admin-styles', plugin_dir_url(__FILE__) . '../assets/css/admin-style.css');
+            
+            // Add inline styles for docs page
+            wp_add_inline_style('gpd-admin-styles', '
+                .gpd-docs-nav {
+                    display: flex;
+                    margin-bottom: 20px;
+                    border-bottom: 1px solid #ccc;
+                }
+                .gpd-docs-nav a {
+                    padding: 10px 15px;
+                    text-decoration: none;
+                    font-weight: 500;
+                }
+                .gpd-docs-nav a.active {
+                    border-bottom: 2px solid #2271b1;
+                    color: #2271b1;
+                }
+                .gpd-docs-section {
+                    background: #fff;
+                    padding: 20px;
+                    margin-bottom: 20px;
+                    border: 1px solid #ccc;
+                }
+                .gpd-docs-intro {
+                    margin-bottom: 20px;
+                }
+                .gpd-shortcode-example {
+                    background: #f0f0f0;
+                    padding: 10px;
+                    margin: 10px 0;
+                    font-family: monospace;
+                    border-left: 3px solid #2271b1;
+                }
+                .gpd-docs h3 {
+                    margin-top: 1.5em;
+                }
+                .gpd-extension-card {
+                    background: #fff;
+                    border: 1px solid #ddd;
+                    padding: 15px;
+                    margin-bottom: 20px;
+                    border-radius: 5px;
+                }
+                .gpd-extension-card h3 {
+                    margin-top: 0;
+                    color: #2271b1;
+                }
+            ');
+        }
+    }
 
-			// Add inline styles for docs page
-			wp_add_inline_style(
-				'gpd-admin-styles',
-				'
-				.gpd-docs-nav {
-					display: flex;
-					margin-bottom: 20px;
-					border-bottom: 1px solid #ccc;
-				}
-				.gpd-docs-nav a {
-					padding: 10px 15px;
-					text-decoration: none;
-					font-weight: 500;
-				}
-				.gpd-docs-nav a.active {
-					border-bottom: 2px solid #2271b1;
-					color: #2271b1;
-				}
-				.gpd-docs-section {
-					background: #fff;
-					padding: 20px;
-					margin-bottom: 20px;
-					border: 1px solid #ccc;
-				}
-				.gpd-docs-intro {
-					margin-bottom: 20px;
-				}
-				.gpd-shortcode-example {
-					background: #f0f0f0;
-					padding: 10px;
-					margin: 10px 0;
-					font-family: monospace;
-					border-left: 3px solid #2271b1;
-				}
-				.gpd-docs h3 {
-					margin-top: 1.5em;
-				}
-			'
-			);
-		}
-	}
+    /**
+     * Add documentation pages to the admin menu
+     */
+    public function add_docs_pages() {
+        add_submenu_page(
+            'edit.php?post_type=business',
+            __( 'Documentation', 'google-places-directory' ),
+            __( 'Documentation', 'google-places-directory' ),
+            'manage_options',
+            'gpd-docs',
+            array( $this, 'render_docs_page' )
+        );
+    }
 
-	/**
-	 * Add documentation pages to the admin menu
-	 */
-	public function add_docs_pages() {
-		add_submenu_page(
-			'edit.php?post_type=business',
-			__( 'Documentation', 'google-places-directory' ),
-			__( 'Documentation', 'google-places-directory' ),
-			'manage_options',
-			'gpd-docs',
-			array( $this, 'render_docs_page' )
-		);
-	}
+    /**
+     * Render the documentation page
+     */
+    public function render_docs_page() {
+        // Determine which tab to show
+        $active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'shortcodes';
+        ?>
+        <div class="wrap gpd-docs">
+            <h1><?php esc_html_e( 'Google Places Directory Documentation', 'google-places-directory' ); ?></h1>
+            
+            <div class="gpd-docs-intro">
+                <p><?php _e( 'This plugin allows you to import businesses from Google Places API and display them on your website using various shortcodes.', 'google-places-directory' ); ?></p>
+            </div>
+            
+            <div class="gpd-docs-nav">
+                <a href="<?php echo esc_url(add_query_arg('tab', 'shortcodes')); ?>" class="<?php echo $active_tab === 'shortcodes' ? 'active' : ''; ?>">
+                    <?php esc_html_e('Shortcodes', 'google-places-directory'); ?>
+                </a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'import')); ?>" class="<?php echo $active_tab === 'import' ? 'active' : ''; ?>">
+                    <?php esc_html_e('Importing Businesses', 'google-places-directory'); ?>
+                </a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'settings')); ?>" class="<?php echo $active_tab === 'settings' ? 'active' : ''; ?>">
+                    <?php esc_html_e('Settings', 'google-places-directory'); ?>
+                </a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'api')); ?>" class="<?php echo $active_tab === 'api' ? 'active' : ''; ?>">
+                    <?php esc_html_e('API Information', 'google-places-directory'); ?>
+                </a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'extensions')); ?>" class="<?php echo $active_tab === 'extensions' ? 'active' : ''; ?>">
+                    <?php esc_html_e('Extensions', 'google-places-directory'); ?>
+                </a>
+            </div>
+            
+            <?php
+            // Load the appropriate tab content
+            switch ($active_tab) {
+                case 'shortcodes':
+                    $this->render_shortcodes_tab();
+                    break;
+                case 'import':
+                    $this->render_import_tab();
+                    break;
+                case 'settings':
+                    $this->render_settings_tab();
+                    break;
+                case 'api':
+                    $this->render_api_tab();
+                    break;
+                case 'extensions':
+                    $this->render_extensions_tab();
+                    break;
+                default:
+                    $this->render_shortcodes_tab();
+            }
+            ?>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render the shortcodes tab
+     */
+    private function render_shortcodes_tab() {
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Available Shortcodes', 'google-places-directory' ); ?></h2>
+            <p><?php esc_html_e( 'Use these shortcodes to display businesses on your website.', 'google-places-directory' ); ?></p>
+            
+            <h3><?php esc_html_e( 'Business Listing', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'Display a list of businesses with various filtering options.', 'google-places-directory' ); ?></p>
+            <div class="gpd-shortcode-example">[gpd-business-list category="restaurants" limit="10" layout="grid" columns="3"]</div>
+            
+            <table class="widefat" style="width: 95%">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>category</code></td>
+                        <td><?php esc_html_e( 'Filter by business category slug', 'google-places-directory' ); ?></td>
+                        <td><em><?php esc_html_e( 'empty (all categories)', 'google-places-directory' ); ?></em></td>
+                        <td><?php esc_html_e( 'Any valid category slug', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>limit</code></td>
+                        <td><?php esc_html_e( 'Maximum number of businesses to display', 'google-places-directory' ); ?></td>
+                        <td>10</td>
+                        <td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>layout</code></td>
+                        <td><?php esc_html_e( 'Display layout for the businesses', 'google-places-directory' ); ?></td>
+                        <td>grid</td>
+                        <td>grid, list</td>
+                    </tr>
+                    <tr>
+                        <td><code>columns</code></td>
+                        <td><?php esc_html_e( 'Number of columns for grid layout', 'google-places-directory' ); ?></td>
+                        <td>3</td>
+                        <td>1-6</td>
+                    </tr>
+                    <tr>
+                        <td><code>orderby</code></td>
+                        <td><?php esc_html_e( 'Sort businesses by this field', 'google-places-directory' ); ?></td>
+                        <td>date</td>
+                        <td>date, title, rating, random</td>
+                    </tr>
+                    <tr>
+                        <td><code>order</code></td>
+                        <td><?php esc_html_e( 'Sort order', 'google-places-directory' ); ?></td>
+                        <td>DESC</td>
+                        <td>ASC, DESC</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3><?php esc_html_e( 'Business Search', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'Display a search form to find businesses.', 'google-places-directory' ); ?></p>
+            <div class="gpd-shortcode-example">[gpd-business-search location_search="true" category_filter="true" rating_filter="true"]</div>
+            
+            <table class="widefat" style="width: 95%">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>location_search</code></td>
+                        <td><?php esc_html_e( 'Include location search field', 'google-places-directory' ); ?></td>
+                        <td>true</td>
+                        <td>true, false</td>
+                    </tr>
+                    <tr>
+                        <td><code>category_filter</code></td>
+                        <td><?php esc_html_e( 'Include category dropdown', 'google-places-directory' ); ?></td>
+                        <td>true</td>
+                        <td>true, false</td>
+                    </tr>
+                    <tr>
+                        <td><code>rating_filter</code></td>
+                        <td><?php esc_html_e( 'Include rating filter', 'google-places-directory' ); ?></td>
+                        <td>false</td>
+                        <td>true, false</td>
+                    </tr>
+                    <tr>
+                        <td><code>results_layout</code></td>
+                        <td><?php esc_html_e( 'Layout for search results', 'google-places-directory' ); ?></td>
+                        <td>grid</td>
+                        <td>grid, list</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3><?php esc_html_e( 'Business Photos', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'Display photos for a specific business.', 'google-places-directory' ); ?></p>
+            <div class="gpd-shortcode-example">[gpd-photos id="123" layout="grid" columns="4" limit="8"]</div>
+            
+            <table class="widefat" style="width: 95%">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>id</code></td>
+                        <td><?php esc_html_e( 'Business post ID (defaults to current post)', 'google-places-directory' ); ?></td>
+                        <td>0</td>
+                        <td><?php esc_html_e( 'Any valid business post ID', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>layout</code></td>
+                        <td><?php esc_html_e( 'Photo display layout', 'google-places-directory' ); ?></td>
+                        <td>grid</td>
+                        <td>grid, carousel, masonry</td>
+                    </tr>
+                    <tr>
+                        <td><code>columns</code></td>
+                        <td><?php esc_html_e( 'Number of columns for grid layout', 'google-places-directory' ); ?></td>
+                        <td>3</td>
+                        <td>1-6</td>
+                    </tr>
+                    <tr>
+                        <td><code>limit</code></td>
+                        <td><?php esc_html_e( 'Maximum number of photos to display', 'google-places-directory' ); ?></td>
+                        <td>10</td>
+                        <td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3><?php esc_html_e( 'Business Reviews', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'Display Google reviews for a business.', 'google-places-directory' ); ?></p>
+            <div class="gpd-shortcode-example">[gpd-reviews id="123" limit="5" layout="grid"]</div>
+            
+            <table class="widefat" style="width: 95%">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>id</code></td>
+                        <td><?php esc_html_e( 'Business post ID (defaults to current post)', 'google-places-directory' ); ?></td>
+                        <td>0</td>
+                        <td><?php esc_html_e( 'Any valid business post ID', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>limit</code></td>
+                        <td><?php esc_html_e( 'Maximum number of reviews to display', 'google-places-directory' ); ?></td>
+                        <td>5</td>
+                        <td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>layout</code></td>
+                        <td><?php esc_html_e( 'Review display layout', 'google-places-directory' ); ?></td>
+                        <td>list</td>
+                        <td>list, grid, carousel</td>
+                    </tr>
+                    <tr>
+                        <td><code>min_rating</code></td>
+                        <td><?php esc_html_e( 'Minimum rating to display (1-5)', 'google-places-directory' ); ?></td>
+                        <td>0</td>
+                        <td>0-5</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <?php do_action('gdp_docs_after_shortcodes'); ?>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render the import tab
+     */
+    private function render_import_tab() {
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Importing Businesses', 'google-places-directory' ); ?></h2>
+            <p><?php esc_html_e( 'Learn how to import businesses from Google Places API.', 'google-places-directory' ); ?></p>
+            
+            <h3><?php esc_html_e( 'API Setup', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'Before importing businesses, you need to set up your Google Places API key.', 'google-places-directory' ); ?></p>
+            <ol>
+                <li><?php esc_html_e( 'Go to Settings > Google Places Directory and enter your API key.', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Make sure the Places API is enabled in your Google Cloud Console.', 'google-places-directory' ); ?></li>
+            </ol>
+            
+            <h3><?php esc_html_e( 'Import Methods', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'There are several ways to import businesses:', 'google-places-directory' ); ?></p>
+            
+            <h4><?php esc_html_e( '1. Single Business Import', 'google-places-directory' ); ?></h4>
+            <p><?php esc_html_e( 'Import a single business using its Place ID:', 'google-places-directory' ); ?></p>
+            <ol>
+                <li><?php esc_html_e( 'Go to Businesses > Import', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Select "Single Business" tab', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Enter the Place ID and click "Import"', 'google-places-directory' ); ?></li>
+            </ol>
+            
+            <h4><?php esc_html_e( '2. Search and Import', 'google-places-directory' ); ?></h4>
+            <p><?php esc_html_e( 'Search for businesses and import multiple results:', 'google-places-directory' ); ?></p>
+            <ol>
+                <li><?php esc_html_e( 'Go to Businesses > Import', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Select "Search and Import" tab', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Enter search terms, location, and radius', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Select businesses from the results and click "Import Selected"', 'google-places-directory' ); ?></li>
+            </ol>
+            
+            <h4><?php esc_html_e( '3. Bulk Import', 'google-places-directory' ); ?></h4>
+            <p><?php esc_html_e( 'Import multiple businesses from a CSV file:', 'google-places-directory' ); ?></p>
+            <ol>
+                <li><?php esc_html_e( 'Go to Businesses > Import', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Select "Bulk Import" tab', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Upload a CSV file with Place IDs (one per line)', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Click "Start Import"', 'google-places-directory' ); ?></li>
+            </ol>
+            
+            <h3><?php esc_html_e( 'Data that Gets Imported', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'The following data is imported for each business:', 'google-places-directory' ); ?></p>
+            <ul>
+                <li><?php esc_html_e( 'Business name', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Address and contact information', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Business hours', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Photos (if enabled in settings)', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Reviews (if enabled in settings)', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Ratings', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Geographic coordinates', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Google Maps URL', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'Automatic Updates', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'You can configure the plugin to automatically update business information:', 'google-places-directory' ); ?></p>
+            <ol>
+                <li><?php esc_html_e( 'Go to Settings > Google Places Directory', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Under "Business Updates", enable "Automatic Updates"', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Set the update frequency (daily, weekly, monthly)', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Select which data to update', 'google-places-directory' ); ?></li>
+            </ol>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render the settings tab
+     */
+    private function render_settings_tab() {
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Plugin Settings', 'google-places-directory' ); ?></h2>
+            <p><?php esc_html_e( 'Configuration options for Google Places Directory.', 'google-places-directory' ); ?></p>
+            
+            <h3><?php esc_html_e( 'API Settings', 'google-places-directory' ); ?></h3>
+            <ul>
+                <li><strong><?php esc_html_e( 'API Key', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Your Google Places API key', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'API Request Limit', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Maximum API requests per day', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'Business Settings', 'google-places-directory' ); ?></h3>
+            <ul>
+                <li><strong><?php esc_html_e( 'Business Slug', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'URL slug for business posts', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Category Slug', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'URL slug for business categories', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Default Category', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Default category for imported businesses', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Auto-assign Categories', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Automatically create and assign categories based on Google data', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'Import Settings', 'google-places-directory' ); ?></h3>
+            <ul>
+                <li><strong><?php esc_html_e( 'Import Photos', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Enable to import business photos', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Import Reviews', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Enable to import business reviews', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Max Photos', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Maximum number of photos to import per business', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Max Reviews', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Maximum number of reviews to import per business', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Photo Size', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Size of imported photos (maxwidth parameter)', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'Update Settings', 'google-places-directory' ); ?></h3>
+            <ul>
+                <li><strong><?php esc_html_e( 'Automatic Updates', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Enable regular updates of business data', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Update Frequency', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'How often to update business data', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Update Data', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Which data to update (details, photos, reviews)', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'Display Settings', 'google-places-directory' ); ?></h3>
+            <ul>
+                <li><strong><?php esc_html_e( 'Business Archive Layout', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Layout for the business archive page', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Results Per Page', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Number of businesses to show per page', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Default Sort Order', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'How to sort businesses by default', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'Template Settings', 'google-places-directory' ); ?></h3>
+            <ul>
+                <li><strong><?php esc_html_e( 'Custom Templates', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Use custom templates for business pages', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Override Archive', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Override theme archive templates', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Override Single', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'Override theme single business templates', 'google-places-directory' ); ?></li>
+            </ul>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render the API tab
+     */
+    private function render_api_tab() {
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'API Information', 'google-places-directory' ); ?></h2>
+            <p><?php esc_html_e( 'Information about setting up and using the Google Places API.', 'google-places-directory' ); ?></p>
+            
+            <h3><?php esc_html_e( 'Getting an API Key', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'To use this plugin, you need a Google Places API key. Here\'s how to get one:', 'google-places-directory' ); ?></p>
+            <ol>
+                <li><?php esc_html_e( 'Go to the Google Cloud Platform Console at https://console.cloud.google.com/', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Create a new project or select an existing one', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Navigate to "APIs & Services > Library"', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Search for "Places API" and enable it', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Go to "APIs & Services > Credentials"', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Click "Create credentials" and select "API key"', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Copy your new API key and paste it in the plugin settings', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Recommended: Restrict the API key to only the Places API', 'google-places-directory' ); ?></li>
+            </ol>
+            
+            <h3><?php esc_html_e( 'API Usage Limits', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'Google Places API has usage limits that you should be aware of:', 'google-places-directory' ); ?></p>
+            <ul>
+                <li><?php esc_html_e( 'Free tier includes $200 of free usage per month', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Basic data costs approximately $0.017 per request', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Photo requests cost approximately $0.007 per request', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Contact details requests cost approximately $0.003 per request', 'google-places-directory' ); ?></li>
+            </ul>
+            <p><em><?php esc_html_e( 'Note: Prices may change. Refer to Google\'s official documentation for current pricing.', 'google-places-directory' ); ?></em></p>
+            
+            <h3><?php esc_html_e( 'Plugin API Usage', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'This plugin uses the following API endpoints:', 'google-places-directory' ); ?></p>
+            <ul>
+                <li><strong><?php esc_html_e( 'Places Search', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'For finding businesses by keywords', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Place Details', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'For getting detailed business information', 'google-places-directory' ); ?></li>
+                <li><strong><?php esc_html_e( 'Place Photos', 'google-places-directory' ); ?></strong>: <?php esc_html_e( 'For retrieving business photos', 'google-places-directory' ); ?></li>
+            </ul>
+            
+            <h3><?php esc_html_e( 'API Troubleshooting', 'google-places-directory' ); ?></h3>
+            <p><?php esc_html_e( 'If you\'re experiencing issues with the API, check the following:', 'google-places-directory' ); ?></p>
+            <ul>
+                <li><?php esc_html_e( 'Verify your API key is correct and properly restricted', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Confirm the Places API is enabled in your Google Cloud Console', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Check your billing is set up (required even for free tier)', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Monitor your API usage in the Google Cloud Console', 'google-places-directory' ); ?></li>
+                <li><?php esc_html_e( 'Check the plugin\'s error log for specific API error messages', 'google-places-directory' ); ?></li>
+            </ul>
+        </div>
+        <?php
+    }
 
-	/**
-	 * Render the documentation page
-	 */
-	public function render_docs_page() {
-		// Determine which tab to show
-		$active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'shortcodes';
-		?>
-		<div class="wrap gpd-docs">
-			<h1><?php esc_html_e( 'Google Places Directory Documentation', 'google-places-directory' ); ?></h1>
-
-			<div class="gpd-docs-intro">
-				<p><?php _e( 'This plugin allows you to import businesses from Google Places API and display them on your website using various shortcodes.', 'google-places-directory' ); ?></p>
-			</div>
-			<?php do_action( 'gpd_docs_before_nav' ); ?>
-
-			<div class="gpd-docs-nav">
-				<a href="<?php echo esc_url( add_query_arg( 'tab', 'shortcodes' ) ); ?>" class="<?php echo $active_tab === 'shortcodes' ? 'active' : ''; ?>">
-					<?php esc_html_e( 'Shortcodes', 'google-places-directory' ); ?>
-				</a>
-				<a href="<?php echo esc_url( add_query_arg( 'tab', 'settings' ) ); ?>" class="<?php echo $active_tab === 'settings' ? 'active' : ''; ?>">
-					<?php esc_html_e( 'Settings', 'google-places-directory' ); ?>
-				</a>
-				<a href="<?php echo esc_url( add_query_arg( 'tab', 'fse' ) ); ?>" class="<?php echo $active_tab === 'fse' ? 'active' : ''; ?>">
-					<?php esc_html_e( 'Full Site Editing', 'google-places-directory' ); ?>
-				</a>
-				<a href="<?php echo esc_url( add_query_arg( 'tab', 'api' ) ); ?>" class="<?php echo $active_tab === 'api' ? 'active' : ''; ?>">
-					<?php esc_html_e( 'API Information', 'google-places-directory' ); ?>
-				</a>
-			</div>
-			<?php do_action( 'gpd_docs_after_nav' ); ?>
-
-			<?php
-			// Load the appropriate tab content
-			switch ( $active_tab ) {
-				case 'settings':
-					$this->render_settings_docs();
-					break;
-				case 'fse':
-					$this->render_fse_docs();
-					break;
-				case 'api':
-					$this->render_api_docs();
-					break;
-				case 'shortcodes':
-				default:
-					$this->render_shortcodes_docs();
-					break;
-			}
-			?>
-		</div>
-		<?php
-	}
-
-	/**
-	 * Render shortcodes documentation
-	 */
-	private function render_shortcodes_docs() {
-		ob_start();
-		do_action( 'gpd_docs_before_shortcodes' );
-		?>
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'Display Business Photos', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'Use the <code>[gpd-photos]</code> shortcode to display photos for a specific business.', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'Parameters', 'google-places-directory' ); ?></h3>
-			<table class="widefat" style="width: 95%">
-				<thead>
-					<tr>
-						<th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
-						<th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
-						<th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
-						<th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td><code>id</code></td>
-						<td><?php esc_html_e( 'The business post ID', 'google-places-directory' ); ?></td>
-						<td>0 (current post)</td>
-						<td><?php esc_html_e( 'Any valid business post ID', 'google-places-directory' ); ?></td>
-					</tr>
-					<tr>
-						<td><code>layout</code></td>
-						<td><?php esc_html_e( 'The gallery layout style', 'google-places-directory' ); ?></td>
-						<td>grid</td>
-						<td>grid, masonry, carousel</td>
-					</tr>
-					<tr>
-						<td><code>columns</code></td>
-						<td><?php esc_html_e( 'Number of columns for grid/masonry layout', 'google-places-directory' ); ?></td>
-						<td>3</td>
-						<td>1, 2, 3, 4</td>
-					</tr>
-					<tr>
-						<td><code>size</code></td>
-						<td><?php esc_html_e( 'The image size to use', 'google-places-directory' ); ?></td>
-						<td>medium</td>
-						<td>thumbnail, medium, large, full</td>
-					</tr>
-					<tr>
-						<td><code>limit</code></td>
-						<td><?php esc_html_e( 'Maximum number of photos to display (0 = all)', 'google-places-directory' ); ?></td>
-						<td>0</td>
-						<td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
-					</tr>
-					<tr>
-						<td><code>show_caption</code></td>
-						<td><?php esc_html_e( 'Whether to show photo captions', 'google-places-directory' ); ?></td>
-						<td>false</td>
-						<td>true, false</td>
-					</tr>
-					<tr>
-						<td><code>class</code></td>
-						<td><?php esc_html_e( 'Additional CSS classes', 'google-places-directory' ); ?></td>
-						<td>empty</td>
-						<td><?php esc_html_e( 'Any CSS class name', 'google-places-directory' ); ?></td>
-					</tr>
-				</tbody>
-			</table>
-
-			<h3><?php esc_html_e( 'Examples', 'google-places-directory' ); ?></h3>
-			<div class="gpd-shortcode-example">[gpd-photos id="123" layout="grid" columns="3" size="medium" limit="6"]</div>
-			<div class="gpd-shortcode-example">[gpd-photos layout="carousel" size="large" show_caption="true"]</div>
-			<div class="gpd-shortcode-example">[gpd-photos layout="masonry" columns="4" class="my-custom-gallery"]</div>
-		</div>
-		<?php
-		do_action( 'gpd_docs_after_shortcodes' );
-		$content = ob_get_clean();
-		echo apply_filters( 'gpd_shortcodes_docs_content', $content );
-	}
-
-	/**
-	 * Render settings documentation
-	 */
-	private function render_settings_docs() {
-		ob_start();
-		do_action( 'gpd_docs_before_settings' );
-		?>
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'API Key Settings', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'The plugin requires a valid Google API key with the Places API (New) enabled.', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'Obtaining a Google API Key', 'google-places-directory' ); ?></h3>
-			<ol>
-				<li><?php _e( 'Go to the <a href="https://console.cloud.google.com/apis/dashboard" target="_blank">Google Cloud Console</a>', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Create a new project or select an existing one', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Enable the <strong>Places API (New)</strong> for your project', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Create credentials to get your API key', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Set up billing (required for the Places API)', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Optional: Add API key restrictions for security', 'google-places-directory' ); ?></li>
-			</ol>
-
-			<h3><?php esc_html_e( 'Plugin Settings', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'Configure your plugin settings at <strong>Businesses → Settings</strong>', 'google-places-directory' ); ?></p>
-			<ul>
-				<li><?php _e( '<strong>API Key</strong>: Enter your Google API key with Places API (New) enabled', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Photos to Import</strong>: Set the maximum number of photos to import per business', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Use the "Test Connection" button to verify your API key works correctly', 'google-places-directory' ); ?></li>
-			</ul>
-		</div>
-
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'Photo Management', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'The plugin provides several features for managing business photos:', 'google-places-directory' ); ?></p>
-
-			<ul>
-				<li><?php _e( '<strong>Photo Import</strong>: Photos are automatically imported when you import businesses', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Photo Limit</strong>: Control how many photos are imported per business in the plugin settings', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Photo Refresh</strong>: Refresh photos for individual businesses from their edit screen', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Featured Image</strong>: The first imported photo is automatically set as the featured image', 'google-places-directory' ); ?></li>
-			</ul>
-
-			<h3><?php esc_html_e( 'Business Photo Column', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'The Businesses list includes a Photos column that shows:', 'google-places-directory' ); ?></p>
-			<ul>
-				<li><?php _e( 'Number of photos attached to each business', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Star icon for businesses with a featured image', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Thumbnail preview on hover', 'google-places-directory' ); ?></li>
-				<li><?php _e( '"Add Photos" link for businesses without photos', 'google-places-directory' ); ?></li>
-			</ul>
-
-			<p><?php _e( 'You can sort and filter businesses by their photo status using the column header and filter dropdown.', 'google-places-directory' ); ?></p>
-		</div>
-		<?php
-		do_action( 'gpd_docs_after_settings' );
-		$content = ob_get_clean();
-		echo apply_filters( 'gpd_settings_docs_content', $content );
-	}
-
-	/**
-	 * Render FSE documentation
-	 */
-	private function render_fse_docs() {
-		ob_start();
-		do_action( 'gpd_docs_before_fse' );
-		?>
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'Using Shortcodes in Full Site Editor (FSE)', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'The plugin\'s shortcodes work seamlessly with the WordPress Full Site Editor. Here\'s how to use them in your FSE templates:', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'Adding Shortcodes to Templates', 'google-places-directory' ); ?></h3>
-			<ol>
-				<li><?php _e( 'Edit a template in the Full Site Editor', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Add a "Shortcode" block where you want the business content to appear', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Enter one of the plugin\'s shortcodes with your desired parameters', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Save the template', 'google-places-directory' ); ?></li>
-			</ol>
-
-			<h3><?php esc_html_e( 'Single Business Template Example', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'For a single business template, you might want to add:', 'google-places-directory' ); ?></p>
-			<ol>
-				<li><?php _e( 'The business title (using WordPress core Title block)', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'The business content (using WordPress core Content block)', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'A Shortcode block with <code>[gpd-photos columns="3" layout="grid"]</code> to show business photos', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'A Shortcode block with <code>[gpd-business-map height="400px"]</code> to show the business location', 'google-places-directory' ); ?></li>
-			</ol>
-
-			<h3><?php esc_html_e( 'Archive Template Example', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'For a business archive or search results page:', 'google-places-directory' ); ?></p>
-			<ol>
-				<li><?php _e( 'Add a Shortcode block with <code>[gpd-business-search show_map="true"]</code> at the top', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Use WordPress core Query Loop block to display business posts', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Optionally add a Shortcode block with <code>[gpd-business-map height="500px"]</code> to show all businesses on a map', 'google-places-directory' ); ?></li>
-			</ol>
-		</div>
-
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'Template Parts for Custom Styling', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'For more customized styling and layout, you can create template parts specifically for businesses:', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'Creating a Business Card Template Part', 'google-places-directory' ); ?></h3>
-			<ol>
-				<li><?php _e( 'Go to Appearance → Editor → Template Parts', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Add a new Template Part (e.g., "Business Card")', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Design your template part using WordPress blocks', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Include shortcodes where needed (e.g., a small photo gallery)', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Use this template part in your business templates', 'google-places-directory' ); ?></li>
-			</ol>
-
-			<h3><?php esc_html_e( 'Responsive Considerations', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'The plugin\'s shortcodes are designed to be responsive and work well across different screen sizes:', 'google-places-directory' ); ?></p>
-			<ul>
-				<li><?php _e( 'Photo galleries adjust from 3 columns to 2 on tablets and 1 on mobile', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Maps maintain aspect ratio across screen sizes', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Search forms adapt to available width', 'google-places-directory' ); ?></li>
-			</ul>
-			<p><?php _e( 'You can further customize responsiveness using block editor settings and custom CSS.', 'google-places-directory' ); ?></p>
-		</div>
-		<?php
-		do_action( 'gpd_docs_after_fse' );
-		$content = ob_get_clean();
-		echo apply_filters( 'gpd_fse_docs_content', $content );
-	}
-
-	/**
-	 * Render API documentation
-	 */
-	private function render_api_docs() {
-		ob_start();
-		do_action( 'gpd_docs_before_api' );
-		?>
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'Places API (New) Information', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'This plugin uses Google\'s new Places API, which was updated in May 2025.', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'API Features Used', 'google-places-directory' ); ?></h3>
-			<ul>
-				<li><?php _e( '<strong>Text Search</strong>: Used for finding businesses by name or type', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Place Details</strong>: Used to get comprehensive information about a specific business', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Place Photos</strong>: Used to retrieve business photos', 'google-places-directory' ); ?></li>
-			</ul>
-
-			<h3><?php esc_html_e( 'API Usage and Billing', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'The Places API is a billing-required API with the following pricing structure:', 'google-places-directory' ); ?></p>
-			<ul>
-				<li><?php _e( '<strong>Text Search</strong>: $5 per 1,000 requests', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Place Details</strong>: $4 per 1,000 requests', 'google-places-directory' ); ?></li>
-				<li><?php _e( '<strong>Photos</strong>: $7 per 1,000 requests', 'google-places-directory' ); ?></li>
-			</ul>
-			<p><?php _e( 'Google provides a monthly free credit that often covers moderate usage. Monitor your usage in the Google Cloud Console.', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'Optimizing API Usage', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'To reduce API costs and improve performance:', 'google-places-directory' ); ?></p>
-			<ul>
-				<li><?php _e( 'Set a reasonable photo limit in settings (3-5 is recommended)', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Import businesses in batches rather than all at once', 'google-places-directory' ); ?></li>
-				<li><?php _e( 'Only refresh photos when necessary', 'google-places-directory' ); ?></li>
-			</ul>
-		</div>
-
-		<div class="gpd-docs-section">
-			<h2><?php esc_html_e( 'Troubleshooting API Issues', 'google-places-directory' ); ?></h2>
-			<p><?php _e( 'If you encounter problems with the Google Places API:', 'google-places-directory' ); ?></p>
-
-			<h3><?php esc_html_e( 'Common Issues and Solutions', 'google-places-directory' ); ?></h3>
-			<table class="widefat" style="width: 95%">
-				<thead>
-					<tr>
-						<th><?php esc_html_e( 'Issue', 'google-places-directory' ); ?></th>
-						<th><?php esc_html_e( 'Possible Solutions', 'google-places-directory' ); ?></th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td><?php esc_html_e( 'API Key Error', 'google-places-directory' ); ?></td>
-						<td>
-							<ul>
-								<li><?php _e( 'Verify your API key is correct', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Check that Places API (New) is enabled for your key', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Ensure billing is properly set up', 'google-places-directory' ); ?></li>
-							</ul>
-						</td>
-					</tr>
-					<tr>
-						<td><?php esc_html_e( 'Photos Not Importing', 'google-places-directory' ); ?></td>
-						<td>
-							<ul>
-								<li><?php _e( 'Make sure photo limit is greater than 0 in settings', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Check if business has photos available on Google', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Try refreshing photos from the business edit screen', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Enable WordPress debug logging to see specific errors', 'google-places-directory' ); ?></li>
-							</ul>
-						</td>
-					</tr>
-					<tr>
-						<td><?php esc_html_e( 'Quota Exceeded', 'google-places-directory' ); ?></td>
-						<td>
-							<ul>
-								<li><?php _e( 'Check your usage in Google Cloud Console', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Increase your quota or wait until it resets', 'google-places-directory' ); ?></li>
-								<li><?php _e( 'Optimize your API usage by limiting requests', 'google-places-directory' ); ?></li>
-							</ul>
-						</td>
-					</tr>
-				</tbody>
-			</table>
-
-			<h3><?php esc_html_e( 'Testing Your API Connection', 'google-places-directory' ); ?></h3>
-			<p><?php _e( 'Use the "Test Connection" button on the Settings page to verify your API key is working properly.', 'google-places-directory' ); ?></p>
-			<p><?php _e( 'For more detailed troubleshooting, check the WordPress debug log for specific error messages.', 'google-places-directory' ); ?></p>
-		</div>
-		<?php
-		do_action( 'gpd_docs_after_api' );
-		$content = ob_get_clean();
-		echo apply_filters( 'gpd_api_docs_content', $content );
-	}
+    /**
+     * Render the extensions tab
+     */
+    private function render_extensions_tab() {
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Extensions and Add-ons', 'google-places-directory' ); ?></h2>
+            <p><?php esc_html_e( 'Enhance your business directory with these companion plugins.', 'google-places-directory' ); ?></p>
+            
+            <div class="gpd-extension-card">
+                <h3><?php esc_html_e( 'GPD Business Maps', 'google-places-directory' ); ?></h3>
+                <p><?php esc_html_e( 'Add interactive maps to your business listings using the free Leaflet maps library.', 'google-places-directory' ); ?></p>
+                <p><strong><?php esc_html_e( 'Features:', 'google-places-directory' ); ?></strong></p>
+                <ul>
+                    <li><?php esc_html_e( 'Display business locations on interactive maps', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Show multiple businesses with marker clustering', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Link directly to Google Maps for directions', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Free alternative to Google Maps API', 'google-places-directory' ); ?></li>
+                </ul>
+                <p><em><?php esc_html_e( 'Note: This plugin uses the _gpd_latitude, _gpd_longitude, and _gpd_maps_uri fields from your business data.', 'google-places-directory' ); ?></em></p>
+            </div>
+            
+            <div class="gpd-extension-card">
+                <h3><?php esc_html_e( 'Gemini2 AI Business Lookup', 'google-places-directory' ); ?></h3>
+                <p><?php esc_html_e( 'Generate AI-powered reviews and insights for imported businesses.', 'google-places-directory' ); ?></p>
+                <p><strong><?php esc_html_e( 'Features:', 'google-places-directory' ); ?></strong></p>
+                <ul>
+                    <li><?php esc_html_e( 'Create AI-generated reviews for any business', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Analyze business data with AI', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Generate content suggestions based on business type', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Enhance your business listings with AI insights', 'google-places-directory' ); ?></li>
+                </ul>
+            </div>
+            
+            <div class="gpd-extension-card">
+                <h3><?php esc_html_e( 'GPD Advanced Search', 'google-places-directory' ); ?></h3>
+                <p><?php esc_html_e( 'Add advanced search capabilities to your business directory.', 'google-places-directory' ); ?></p>
+                <p><strong><?php esc_html_e( 'Features:', 'google-places-directory' ); ?></strong></p>
+                <ul>
+                    <li><?php esc_html_e( 'Search businesses by distance from location', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Filter by multiple criteria simultaneously', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'AJAX-powered real-time search results', 'google-places-directory' ); ?></li>
+                    <li><?php esc_html_e( 'Save and share search results', 'google-places-directory' ); ?></li>
+                </ul>
+                <p><em><?php esc_html_e( 'Coming soon!', 'google-places-directory' ); ?></em></p>
+            </div>
+        </div>
+        <?php
+    }
 }
 
 // Initialize the docs
