@@ -29,11 +29,15 @@ require_once GPD_PLUGIN_DIR . 'includes/class-gpd-admin-ui.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-docs.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-shortcodes.php';
+require_once GPD_PLUGIN_DIR . 'includes/class-gpd-import-export.php';
 
 // Load documentation files
 require_once GPD_PLUGIN_DIR . 'includes/docs/shortcodes.php';
 require_once GPD_PLUGIN_DIR . 'includes/docs/custom-fields.php';
 require_once GPD_PLUGIN_DIR . 'includes/docs/developer.php';
+
+// Load SEO functionality
+require_once GPD_PLUGIN_DIR . 'includes/class-gpd-seo.php';
 
 // Only include photo manager if the extension plugin is not active
 if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
@@ -47,9 +51,10 @@ function gpd_init() {
     
     // Load settings
     GPD_Settings::instance();
-    
-    // Load importer
+      // Load importer, import/export, and SEO functionality
     GPD_Importer::instance();
+    GPD_Import_Export::instance();
+    GPD_SEO::instance();
     
     // Load admin UI for import page
     GPD_Admin_UI::instance();
