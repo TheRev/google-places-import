@@ -25,8 +25,13 @@ require_once GPD_PLUGIN_DIR . 'includes/class-gpd-settings.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-importer.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-admin-ui.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-docs.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-photo-shortcodes.php'; 
+
+// Only include photo manager if the extension plugin is not active
+if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
+    require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-manager.php';
+}
 
 // Initialize the plugin
 function gpd_init() {
@@ -45,8 +50,10 @@ function gpd_init() {
     // Load shortcodes
     GPD_Shortcodes::instance();
     
-    // Load photo manager
-    GPD_Photo_Manager::instance();
+    // Load photo manager only if extension plugin is not active
+    if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
+        GPD_Photo_Manager::instance();
+    }
     
     // Load text domain
     load_plugin_textdomain( 'google-places-directory', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
@@ -64,3 +71,18 @@ function gpd_activate() {
     // Flush rewrite rules
     flush_rewrite_rules();
 }
+/**
+ * Enqueue frontend template styles
+ */
+function gpd_enqueue_template_styles() {
+    // Only enqueue on business post type or when using the template
+    if (is_singular('business') || (is_page() && get_page_template_slug() === 'template-business.php')) {
+        wp_enqueue_style(
+            'gpd-frontend-template',
+            plugin_dir_url(__FILE__) . 'assets/css/frontend-template.css',
+            array('gpd-frontend'), // Make it dependent on your main frontend CSS
+            '1.0.0'
+        );
+    }
+}
+add_action('wp_enqueue_scripts', 'gpd_enqueue_template_styles');
