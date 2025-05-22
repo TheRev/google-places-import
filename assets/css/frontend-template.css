@@ -1,0 +1,173 @@
+/**
+ * Google Places Directory - Business Page Template Styles
+ * Version: 1.0.0
+ * Date: 2025-05-21
+ */
+
+/* Main container */
+.gpd-business-single {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Photos Section */
+.gpd-photos-section {
+    margin-bottom: 30px;
+}
+
+/* Two-column layout for map and info */
+.gpd-business-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.gpd-map-column {
+    flex: 0 0 40%;
+}
+
+.gpd-info-column {
+    flex: 0 0 calc(60% - 30px);
+}
+
+/* Business info styling */
+.gpd-business-info-block {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.gpd-business-info-block h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.gpd-business-info-wrapper {
+    font-size: 16px;
+}
+
+.gpd-info-row {
+    display: flex;
+    margin-bottom: 15px;
+    align-items: flex-start;
+}
+
+.gpd-info-label {
+    flex: 0 0 100px;
+    font-weight: 600;
+    color: #333;
+}
+
+.gpd-info-value {
+    flex: 1;
+}
+
+.gpd-info-value a {
+    color: #0073aa;
+    text-decoration: none;
+}
+
+.gpd-info-value a:hover {
+    text-decoration: underline;
+}
+
+/* Rating stars */
+.gpd-stars {
+    display: inline-block;
+    margin-right: 5px;
+    color: #ffb400;
+    letter-spacing: 2px;
+}
+
+.gpd-rating-value {
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+.gpd-review-count {
+    font-size: 0.9em;
+    color: #666;
+}
+
+/* Hours display */
+.gpd-hour-row {
+    margin-bottom: 5px;
+}
+
+.gpd-day {
+    font-weight: 600;
+    margin-right: 10px;
+    display: inline-block;
+    width: 100px;
+}
+
+/* Two-column review layout */
+.gpd-review-heading {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 10px;
+}
+
+.gpd-review-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    margin-top: 20px;
+}
+
+.gpd-review-column {
+    flex: 0 0 calc(50% - 15px);
+}
+
+.gpd-review-column p:first-child {
+    margin-top: 0;
+}
+
+/* Business categories display */
+.gpd-business-categories {
+    margin-bottom: 20px;
+}
+
+.gpd-business-category {
+    display: inline-block;
+    background-color: #f0f0f0;
+    padding: 5px 10px;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #555;
+}
+
+/* Price level */
+.gpd-price-level {
+    color: #28a745;
+    font-weight: 600;
+}
+
+/* Responsive styling */
+@media (max-width: 768px) {
+    .gpd-business-columns,
+    .gpd-review-columns {
+        flex-direction: column;
+    }
+    
+    .gpd-map-column,
+    .gpd-info-column,
+    .gpd-review-column {
+        flex: 0 0 100%;
+    }
+    
+    .gpd-info-row {
+        flex-direction: column;
+    }
+    
+    .gpd-info-label {
+        margin-bottom: 5px;
+    }
+}
