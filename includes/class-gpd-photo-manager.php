@@ -1035,20 +1035,21 @@ public function ajax_refresh_photos() {
      * @return int Number of photos
      */
     private function count_total_photos() {
-        $query = new WP_Query( array(
-            'post_type' => 'attachment',
-            'posts_per_page' => -1,
-            'fields' => 'ids',
-            'no_found_rows' => true,
-            'meta_query' => array(
-                array(
-                    'key' => '_gpd_photo_reference',
-                    'compare' => 'EXISTS',
-                ),
-            ),
-        ) );
+        global $wpdb;
         
-        return $query->post_count;
+        // Get count of all valid photo attachments with references
+        $count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT pm.post_id) 
+            FROM {$wpdb->postmeta} pm
+            JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            WHERE pm.meta_key = %s 
+            AND p.post_type = 'attachment'
+            AND p.post_status = 'inherit'
+            AND pm.meta_value != ''",
+            '_gpd_photo_reference'
+        ));
+        
+        return (int) $count;
     }
 
     /**
