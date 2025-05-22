@@ -480,66 +480,87 @@ class GPD_Importer {
 
             // 10. Process Photos - NEW SECTION
             if (!is_wp_error($current_post_id) && $current_post_id > 0) {
-                // Get photo limit from settings
-                $photo_limit = (int) get_option('gpd_photo_limit', 3);
+                /**
+                 * Allow plugins to handle photo processing themselves
+                 * 
+                 * @param bool $should_process_internally Whether the main plugin should process photos
+                 * @param int $post_id The business post ID
+                 * @param array $details The place details from API
+                 * @return bool
+                 */
+                $should_process_internally = apply_filters('gpd_should_process_photos_internally', true, $current_post_id, $details);
                 
-                // Only process photos if limit is greater than 0
-                if ($photo_limit > 0 && !empty($details['photos'])) {
-                    // Store the array of photo references
-                    $photos_data = $details['photos'];
-                    $featured_image_id = 0;
+                if ($should_process_internally) {
+                    // Get photo limit from settings
+                    $photo_limit = (int) get_option('gpd_photo_limit', 3);
                     
-                    // Store references for future use
-                    $photo_refs = [];
-                    
-                    // Process up to the limit
-                    $count = 0;
-                    foreach ($photos_data as $photo_data) {
-                        if ($count >= $photo_limit) {
-                            break;
+                    // Only process photos if limit is greater than 0
+                    if ($photo_limit > 0 && !empty($details['photos'])) {
+                        // Store the array of photo references
+                        $photos_data = $details['photos'];
+                        $featured_image_id = 0;
+                        
+                        // Store references for future use
+                        $photo_refs = [];
+                        
+                        // Process up to the limit
+                        $count = 0;
+                        foreach ($photos_data as $photo_data) {
+                            if ($count >= $photo_limit) {
+                                break;
+                            }
+                            
+                            if (isset($photo_data['name'])) {
+                                $photo_refs[] = $photo_data['name'];
+                                $photo_ref = $photo_data['name'];
+                                
+                                // Check if we already imported this photo
+                                $existing_photo = get_posts([
+                                    'post_type' => 'attachment',
+                                    'posts_per_page' => 1,
+                                    'meta_key' => '_gpd_photo_reference',
+                                    'meta_value' => $photo_ref,
+                                    'fields' => 'ids',
+                                ]);
+                                
+                                if (!empty($existing_photo)) {
+                                    // Photo already exists, use this ID
+                                    $attach_id = $existing_photo[0];
+                                } else {
+                                    // Import the photo
+                                    $attach_id = $this->import_photo($photo_ref, $current_post_id, $name, $count + 1);
+                                }
+                                
+                                // Set the first photo as featured image
+                                if ($attach_id && $count === 0) {
+                                    set_post_thumbnail($current_post_id, $attach_id);
+                                    $featured_image_id = $attach_id;
+                                }
+                                
+                                $count++;
+                            }
                         }
                         
-                        if (isset($photo_data['name'])) {
-                            $photo_refs[] = $photo_data['name'];
-                            $photo_ref = $photo_data['name'];
-                            
-                            // Check if we already imported this photo
-                            $existing_photo = get_posts([
-                                'post_type' => 'attachment',
-                                'posts_per_page' => 1,
-                                'meta_key' => '_gpd_photo_reference',
-                                'meta_value' => $photo_ref,
-                                'fields' => 'ids',
-                            ]);
-                            
-                            if (!empty($existing_photo)) {
-                                // Photo already exists, use this ID
-                                $attach_id = $existing_photo[0];
-                            } else {
-                                // Import the photo
-                                $attach_id = $this->import_photo($photo_ref, $current_post_id, $name, $count + 1);
-                            }
-                            
-                            // Set the first photo as featured image
-                            if ($attach_id && $count === 0) {
-                                set_post_thumbnail($current_post_id, $attach_id);
-                                $featured_image_id = $attach_id;
-                            }
-                            
-                            $count++;
+                        // Store photo references as post meta
+                        if (!empty($photo_refs)) {
+                            update_post_meta($current_post_id, '_gpd_photo_references', $photo_refs);
+                        }
+                        
+                        // Store featured image reference
+                        if ($featured_image_id) {
+                            update_post_meta($current_post_id, '_gpd_featured_photo_id', $featured_image_id);
                         }
                     }
-                    
-                    // Store photo references as post meta
-                    if (!empty($photo_refs)) {
-                        update_post_meta($current_post_id, '_gpd_photo_references', $photo_refs);
-                    }
-                    
-                    // Store featured image reference
-                    if ($featured_image_id) {
-                        update_post_meta($current_post_id, '_gpd_featured_photo_id', $featured_image_id);
-                    }
                 }
+                
+                /**
+                 * Fires after photo processing should occur, whether handled internally or by an extension
+                 * 
+                 * @param int $post_id The business post ID
+                 * @param array $details The place details from API
+                 * @param bool $is_update Whether this was an update
+                 */
+                do_action('gpd_after_photo_processing', $current_post_id, $details, $is_update);
             }
 
             // Action hook
