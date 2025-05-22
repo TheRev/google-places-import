@@ -32,10 +32,13 @@ class GPD_Photo_Manager {
     
     // Add admin notices
     add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
-    
+
     // Add Ajax handlers
     add_action( 'wp_ajax_gpd_refresh_business_photos', array( $this, 'ajax_refresh_photos' ) );
     add_action( 'wp_ajax_gpd_get_businesses_without_photos', array( $this, 'ajax_get_businesses_without_photos' ) );
+
+    // Add handler for saving photo settings
+    add_action( 'admin_post_gpd_save_photo_settings', array( $this, 'save_photo_settings' ) );
 }
 
     /**
@@ -556,6 +559,12 @@ public function ajax_refresh_photos() {
         $total_photos = $this->count_total_photos();
         $photo_limit = (int) get_option( 'gpd_photo_limit', 3 );
         
+        // Show settings updated message if needed
+        if ( isset( $_GET['settings-updated'] ) ) {
+            add_settings_error( 'gpd_messages', 'gpd_message', __( 'Photo settings saved.', 'google-places-directory' ), 'updated' );
+        }
+        
+        settings_errors( 'gpd_messages' );
         ?>
         <div class="wrap gpd-photo-management">
             <h1><?php esc_html_e( 'Photo Management', 'google-places-directory' ); ?></h1>
@@ -579,6 +588,37 @@ public function ajax_refresh_photos() {
                 <div class="gpd-stat-card">
                     <h2><?php echo number_format( $total_photos ); ?></h2>
                     <p><?php esc_html_e( 'Total Photos', 'google-places-directory' ); ?></p>
+                </div>
+            </div>
+            
+            <div class="gpd-photo-settings">
+                <div class="gpd-action-card">
+                    <h3><?php esc_html_e( 'Photo Import Settings', 'google-places-directory' ); ?></h3>
+                    
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                        <?php wp_nonce_field( 'gpd_save_photo_settings_action', 'gpd_save_photo_settings_nonce' ); ?>
+                        <input type="hidden" name="action" value="gpd_save_photo_settings">
+                        
+                        <table class="form-table" role="presentation">
+                            <tr>
+                                <th scope="row"><label for="gpd_photo_limit"><?php esc_html_e( 'Photos to Import', 'google-places-directory' ); ?></label></th>
+                                <td>
+                                    <select name="gpd_photo_limit" id="gpd_photo_limit">
+                                        <option value="0" <?php selected( $photo_limit, 0 ); ?>><?php esc_html_e( 'None', 'google-places-directory' ); ?></option>
+                                        <option value="1" <?php selected( $photo_limit, 1 ); ?>><?php esc_html_e( '1 (Featured Image Only)', 'google-places-directory' ); ?></option>
+                                        <option value="3" <?php selected( $photo_limit, 3 ); ?>><?php esc_html_e( '3 (Default)', 'google-places-directory' ); ?></option>
+                                        <option value="5" <?php selected( $photo_limit, 5 ); ?>><?php esc_html_e( '5', 'google-places-directory' ); ?></option>
+                                        <option value="10" <?php selected( $photo_limit, 10 ); ?>><?php esc_html_e( '10 (Maximum)', 'google-places-directory' ); ?></option>
+                                    </select>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Maximum number of photos to import per business. The first photo will be set as the featured image.', 'google-places-directory' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <?php submit_button( __( 'Save Changes', 'google-places-directory' ) ); ?>
+                    </form>
                 </div>
             </div>
             
@@ -700,6 +740,14 @@ public function ajax_refresh_photos() {
             margin-bottom: 30px;
         }
         
+        .gpd-photo-settings {
+            margin-bottom: 30px;
+        }
+        
+        .gpd-photo-settings .gpd-action-card {
+            max-width: 800px;
+        }
+        
         .gpd-stat-card {
             background: white;
             border: 1px solid #ccd0d4;
@@ -713,13 +761,6 @@ public function ajax_refresh_photos() {
             font-size: 32px;
             line-height: 1.2;
             color: #0073aa;
-        }
-        
-        .gpd-photo-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
         }
         
         .gpd-action-card {
@@ -1226,5 +1267,35 @@ private function download_and_attach_photo($photo_url, $post_id, $photo_referenc
         
         // Clear featured image
         delete_post_thumbnail( $post_id );
+    }
+
+    /**
+     * Save photo settings
+     */
+    public function save_photo_settings() {
+        if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_photo_settings_action', 'gpd_save_photo_settings_nonce' ) ) {
+            wp_die( __( 'Permission denied', 'google-places-directory' ) );
+        }
+
+        // Save photo limit setting
+        if ( isset( $_POST['gpd_photo_limit'] ) ) {
+            $photo_limit = intval( $_POST['gpd_photo_limit'] );
+            // Ensure it's within valid range (0-10)
+            $photo_limit = min( 10, max( 0, $photo_limit ) );
+            update_option( 'gpd_photo_limit', $photo_limit );
+        }
+
+        // Redirect back to the photo management page with success message
+        $redirect_url = add_query_arg(
+            array(
+                'post_type' => 'business',
+                'page' => 'gpd-photo-management',
+                'settings-updated' => 'true',
+            ),
+            admin_url( 'edit.php' )
+        );
+
+        wp_redirect( $redirect_url );
+        exit;
     }
 }
