@@ -2,12 +2,13 @@
 /**
  * Plugin Name: Google Places Directory
  * Description: Import businesses from Google Places API (New) into your WordPress site
- * Version: 2.3.0
+ * Version: 2.6.0
  * Author: TheRev
  * Text Domain: google-places-directory
  * Domain Path: /languages
  * 
  * Updated for Google Places API v1 in May 2025
+ * Documentation reorganized and enhanced in May 2025
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -15,7 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants
-define( 'GPD_VERSION', '2.3.0' );
+define( 'GPD_VERSION', '2.6.0' );
+define( 'GPD_DOCS_VERSION', '2.6.0' );
 define( 'GPD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -25,8 +27,13 @@ require_once GPD_PLUGIN_DIR . 'includes/class-gpd-settings.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-importer.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-admin-ui.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-docs.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-photo-shortcodes.php'; 
+require_once GPD_PLUGIN_DIR . 'includes/class-gpd-docs.php';
+require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-shortcodes.php';
+
+// Load documentation files
+require_once GPD_PLUGIN_DIR . 'includes/docs/shortcodes.php';
+require_once GPD_PLUGIN_DIR . 'includes/docs/custom-fields.php';
+require_once GPD_PLUGIN_DIR . 'includes/docs/developer.php';
 
 // Only include photo manager if the extension plugin is not active
 if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
