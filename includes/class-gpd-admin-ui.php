@@ -394,13 +394,27 @@ class GPD_Admin_UI {
             <div class="notice notice-info is-dismissible">
                 <p>
                     <strong><?php _e('Google Places API Update:', 'google-places-directory'); ?></strong>
-                    <?php _e('This plugin now uses the new Google Places API. Results may look slightly different from previous versions.', 'google-places-directory'); ?>
+                    <?php _e('This plugin now uses the new Google Places API v1. Results may look slightly different from previous versions.', 'google-places-directory'); ?>
                 </p>
             </div>
             <?php
             // Set cookie to avoid showing the notice on every page load
             setcookie('gpd_api_notice_shown', '1', time() + DAY_IN_SECONDS, ADMIN_COOKIE_PATH);
         }
+        
+        // Add new notice about API v1 SKU requirements
+        ?>
+        <div class="notice notice-warning is-dismissible">
+            <p>
+                <strong><?php _e('Google Places API v1 Requirements:', 'google-places-directory'); ?></strong>
+                <?php _e('This plugin requires the Places API v1 with "Place Details - Advanced" or "Place Details - Higher Data Freshness" SKU enabled.', 'google-places-directory'); ?>
+            </p>
+            <p>
+                <?php _e('If you see errors about "Cannot find matching fields for path \'geometry.location\'" when importing businesses, you need to enable one of these higher-tier SKUs in your Google Cloud Console.', 'google-places-directory'); ?>
+                <a href="https://console.cloud.google.com/apis/library/places.googleapis.com" target="_blank"><?php _e('Open Google Cloud Console', 'google-places-directory'); ?></a>
+            </p>
+        </div>
+        <?php
     }
 
     public function add_admin_pages() {
@@ -471,7 +485,13 @@ class GPD_Admin_UI {
             <?php if ($has_error): ?>
                 <div class="notice notice-error">
                     <p><?php echo esc_html($error_message); ?></p>
-                    <p><?php _e('If this is an API error, please check your API key settings and make sure Places API (New) is enabled.', 'google-places-directory'); ?></p>
+                    <p><?php _e('API Error Troubleshooting:', 'google-places-directory'); ?></p>
+                    <ol>
+                        <li><?php _e('Ensure Places API v1 is enabled for your project', 'google-places-directory'); ?></li>
+                        <li><?php _e('Verify that "Place Details - Advanced" or "Higher Data Freshness" SKU is enabled', 'google-places-directory'); ?></li>
+                        <li><?php _e('Check that your API key has permissions to access Places API v1', 'google-places-directory'); ?></li>
+                        <li><?php _e('Make sure your billing account is properly configured', 'google-places-directory'); ?></li>
+                    </ol>
                 </div>
             <?php endif; ?>
 
