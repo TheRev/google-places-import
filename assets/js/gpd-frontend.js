@@ -1,7 +1,7 @@
 /**
  * Google Places Directory - Frontend Script
- * Version: 2.5.0
- * Date: 2025-05-20
+ * Version: 2.5.1
+ * Date: 2025-05-22
  */
 (function($) {
     'use strict';
@@ -11,6 +11,7 @@
         initCarousels();
         initMasonry();
         initBusinessSearch();
+        initPhotoGalleryEnhancements();
     }
     
     // Initialize carousels
@@ -356,15 +357,136 @@
             }
         });
     }
+
+    // Initialize all photo gallery enhancements
+    function initPhotoGalleryEnhancements() {
+        initPhotoLazyLoading();
+        initPhotoFiltering();
+    }
+
+    // Lazy loading with intersection observer
+    function initPhotoLazyLoading() {
+        if ('IntersectionObserver' in window) {
+            const imageObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        img.addEventListener('load', () => {
+                            img.classList.add('loaded');
+                        });
+                        observer.unobserve(img);
+                    }
+                });
+            }, {
+                rootMargin: '200px 0px'
+            });
+            
+            document.querySelectorAll('.gpd-column-item img, .gpd-grid-item img, .gpd-masonry-item img').forEach(img => {
+                imageObserver.observe(img);
+            });
+        } else {
+            // Fallback for browsers that don't support IntersectionObserver
+            document.querySelectorAll('.gpd-column-item img, .gpd-grid-item img, .gpd-masonry-item img').forEach(img => {
+                img.classList.add('loaded');
+            });
+        }
+    }
+
+    // Photo filtering and sorting functionality
+    function initPhotoFiltering() {
+        const filterInput = document.getElementById('gpd-photo-filter');
+        const sortSelect = document.getElementById('gpd-photo-sort');
+        
+        if (filterInput) {
+            filterInput.addEventListener('input', function() {
+                const filterText = this.value.toLowerCase();
+                const items = document.querySelectorAll('.gpd-column-item, .gpd-grid-item, .gpd-masonry-item, .gpd-carousel-slide');
+                
+                items.forEach(item => {
+                    const caption = item.querySelector('.gpd-caption');
+                    if (!caption || caption.textContent.toLowerCase().includes(filterText)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        }
+        
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function() {
+                const container = document.querySelector('.gpd-column-container, .gpd-grid-container, .gpd-masonry-container');
+                if (!container) return;
+                
+                const items = Array.from(container.children);
+                
+                switch (this.value) {
+                    case 'date_asc':
+                        items.sort((a, b) => {
+                            return new Date(a.dataset.date) - new Date(b.dataset.date);
+                        });
+                        break;
+                    case 'date_desc':
+                        items.sort((a, b) => {
+                            return new Date(b.dataset.date) - new Date(a.dataset.date);
+                        });
+                        break;
+                    default:
+                        // Default order is maintained by the original index
+                        items.sort((a, b) => {
+                            return parseInt(a.dataset.index) - parseInt(b.dataset.index);
+                        });
+                }
+                
+                // Re-append items in the new order
+                items.forEach(item => container.appendChild(item));
+            });
+        }
+    }
+
+    // Preload adjacent images for smoother lightbox experience
+    function preloadAdjacentImages(currentIndex, images) {
+        if (!images || images.length <= 1) return;
+        
+        // Preload next image
+        const nextIndex = (currentIndex + 1) % images.length;
+        const nextImage = new Image();
+        nextImage.src = images[nextIndex].href || images[nextIndex];
+        
+        // Preload previous image
+        const prevIndex = (currentIndex - 1 + images.length) % images.length;
+        const prevImage = new Image();
+        prevImage.src = images[prevIndex].href || images[prevIndex];
+    }
+
+    // Handle lightbox navigation and preloading
+    function enhanceLightbox() {
+        // This method should be adjusted to work with your specific lightbox implementation
+        // The function is prepared but needs to be integrated with your lightbox code
+        $('.gpd-lightbox').on('click', function() {
+            // Find all lightbox links in the same container
+            const $container = $(this).closest('.gpd-photos-gallery');
+            const $lightboxLinks = $container.find('.gpd-lightbox');
+            const currentIndex = $lightboxLinks.index(this);
+            
+            // When a lightbox image is displayed, preload adjacent images
+            // Note: You may need to adjust this based on your lightbox implementation
+            setTimeout(function() {
+                preloadAdjacentImages(currentIndex, $lightboxLinks.toArray());
+            }, 100);
+        });
+    }
     
     // Initialize when DOM is ready
     $(document).ready(function() {
         init();
+        enhanceLightbox();
     });
     
     // Re-initialize when new content is loaded
     $(document).on('gpd:contentLoaded', function() {
         init();
+        enhanceLightbox();
     });
     
 })(jQuery);
