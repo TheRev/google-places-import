@@ -12,7 +12,133 @@
     border-radius: 4px;
     margin: 10px 0;
 }
+/* Column Layout Enhancements */
+.gpd-column-container {
+    width: 100%;
+}
 
+.gpd-column-item {
+    width: 100%;
+    position: relative;
+}
+
+.gpd-column-item img {
+    width: 100%;
+    height: auto;
+    display: block;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.gpd-column-item img.loaded {
+    opacity: 1;
+}
+
+.gpd-column-item.gpd-no-hover {
+    transform: none !important;
+    transition: none !important;
+}
+
+.gpd-column-item.gpd-no-hover:hover {
+    transform: none !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Download Button */
+.gpd-download-photo {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    z-index: 2;
+}
+
+.gpd-download-photo:hover {
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+}
+
+/* Filtering Controls */
+.gpd-photos-controls {
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.gpd-filter-controls,
+.gpd-sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gpd-filter-controls input {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    width: 200px;
+}
+
+.gpd-sort-controls select {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Pagination */
+.gpd-pagination {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.gpd-pagination a {
+    display: inline-block;
+    padding: 5px 10px;
+    margin: 0 3px;
+    border: 1px solid #ddd;
+    text-decoration: none;
+    color: #333;
+}
+
+.gpd-pagination a.gpd-current-page {
+    background-color: #0073aa;
+    color: white;
+    border-color: #0073aa;
+}
+
+/* Caption Editing */
+.gpd-edit-caption {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 5px;
+    padding: 0;
+    opacity: 0.8;
+}
+
+.gpd-edit-caption:hover {
+    opacity: 1;
+}
+
+/* Loading Indicator */
+.gpd-loading-placeholder {
+    background-color: #f0f0f0;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 .gpd-no-photos {
     padding: 20px;
     text-align: center;
