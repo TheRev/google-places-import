@@ -13,26 +13,36 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class GPD_Docs {
-    private static $instance = null;
     private $tabs = array();
+    private static $instance = null;
 
     public static function instance() {
-        if ( self::$instance === null ) {
+        if (self::$instance === null) {
             self::$instance = new self();
-            self::$instance->init_hooks();
         }
         return self::$instance;
     }
 
-    private function init_hooks() {
-        add_action( 'admin_menu', array( $this, 'add_docs_pages' ) );
-        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
+    public function __construct() {
+        // Register hooks
+        add_action('admin_menu', array($this, 'add_docs_page'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_styles'));
+        add_action('init', array($this, 'register_tabs'));
+    }
+
+    // Move tab registration to a separate method called on init
+    public function register_tabs() {
+        require_once dirname(__FILE__) . '/docs/custom-fields.php';
+        require_once dirname(__FILE__) . '/docs/shortcodes.php';
+        require_once dirname(__FILE__) . '/docs/developer.php';
         
-        // Register default tabs
-        $this->register_default_tabs();
-        
-        // Allow add-ons to register their tabs (priority 20 gives add-ons time to initialize)
-        add_action( 'init', array( $this, 'finalize_tabs' ), 20 );
+        // Register core tabs
+        $this->register_tab('get-started', __('Getting Started', 'google-places-directory'), array($this, 'render_settings_docs'), 10);
+        $this->register_tab('photos', __('Photo Management', 'google-places-directory'), array($this, 'render_photos_docs'), 20);
+        $this->register_tab('shortcodes', __('Shortcodes', 'google-places-directory'), 'gpd_render_shortcodes_docs', 30);
+        $this->register_tab('custom-fields', __('Custom Fields', 'google-places-directory'), 'gpd_render_custom_fields_docs', 40);
+        $this->register_tab('fse', __('Full Site Editing', 'google-places-directory'), array($this, 'render_fse_docs'), 50);
+        $this->register_tab('api', __('API Information', 'google-places-directory'), array($this, 'render_api_docs'), 60);
     }
     
     /**
@@ -56,25 +66,6 @@ class GPD_Docs {
         );
         
         return true;
-    }
-    
-    /**
-     * Register built-in documentation tabs
-     */
-    private function register_default_tabs() {
-        // Include documentation files
-        require_once dirname(__FILE__) . '/docs/shortcodes.php';
-        require_once dirname(__FILE__) . '/docs/custom-fields.php';
-        require_once dirname(__FILE__) . '/docs/developer.php';
-        
-        // Register core tabs
-        $this->register_tab('get-started', __('Getting Started', 'google-places-directory'), array($this, 'render_settings_docs'), 10);
-        $this->register_tab('photos', __('Photo Management', 'google-places-directory'), array($this, 'render_photos_docs'), 20);
-        $this->register_tab('shortcodes', __('Shortcodes', 'google-places-directory'), 'gpd_render_shortcodes_docs', 30);
-        $this->register_tab('custom-fields', __('Custom Fields', 'google-places-directory'), 'gpd_render_custom_fields_docs', 40);
-        $this->register_tab('fse', __('Full Site Editing', 'google-places-directory'), array($this, 'render_fse_docs'), 50);
-        $this->register_tab('api', __('API Information', 'google-places-directory'), array($this, 'render_api_docs'), 60);
-        $this->register_tab('developer', __('Developer Guide', 'google-places-directory'), 'gpd_render_developer_docs', 70);
     }
     
     /**
@@ -143,7 +134,7 @@ class GPD_Docs {
     /**
      * Add documentation pages to the admin menu
      */
-    public function add_docs_pages() {
+    public function add_docs_page() {
         add_submenu_page(
             'edit.php?post_type=business',
             __( 'Documentation', 'google-places-directory' ),

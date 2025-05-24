@@ -23,23 +23,23 @@ class GPD_Photo_Manager {
     }
 
     private function init_hooks() {
-    // Add admin menu for photo management
-    add_action( 'admin_menu', array( $this, 'add_photo_management_page' ) );
-    
-    // Add bulk action for refreshing photos
-    add_filter( 'bulk_actions-edit-business', array( $this, 'add_bulk_actions' ) );
-    add_filter( 'handle_bulk_actions-edit-business', array( $this, 'handle_bulk_actions' ), 10, 3 );
-    
-    // Add admin notices
-    add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
+        // Add admin menu for photo management after post type is registered
+        add_action('admin_menu', array($this, 'add_photo_management_page'), 20);
+        
+        // Add bulk action for refreshing photos
+        add_filter('bulk_actions-edit-business', array($this, 'add_bulk_actions'));
+        add_filter('handle_bulk_actions-edit-business', array($this, 'handle_bulk_actions'), 10, 3);
+        
+        // Add admin notices
+        add_action('admin_notices', array($this, 'display_admin_notices'));
 
-    // Add Ajax handlers
-    add_action( 'wp_ajax_gpd_refresh_business_photos', array( $this, 'ajax_refresh_photos' ) );
-    add_action( 'wp_ajax_gpd_get_businesses_without_photos', array( $this, 'ajax_get_businesses_without_photos' ) );
+        // Add Ajax handlers
+        add_action('wp_ajax_gpd_refresh_business_photos', array($this, 'ajax_refresh_photos'));
+        add_action('wp_ajax_gpd_get_businesses_without_photos', array($this, 'ajax_get_businesses_without_photos'));
 
-    // Add handler for saving photo settings
-    add_action( 'admin_post_gpd_save_photo_settings', array( $this, 'save_photo_settings' ) );
-}
+        // Add handler for saving photo settings
+        add_action('admin_post_gpd_save_photo_settings', array($this, 'save_photo_settings'));
+    }
 
     /**
      * Add the photo management page to the admin menu

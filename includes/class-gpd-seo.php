@@ -12,39 +12,38 @@ if (!defined('ABSPATH')) {
 
 class GPD_SEO {
     private static $instance = null;
+    private $meta_fields = array();
 
     public static function instance() {
         if (self::$instance === null) {
             self::$instance = new self();
-            self::$instance->init_hooks();
         }
         return self::$instance;
     }
 
-    private function init_hooks() {
-        // Meta tags
-        add_action('wp_head', array($this, 'add_meta_tags'), 1);
-        add_action('wp_head', array($this, 'add_business_schema'), 2);
-
-        // Social meta tags
-        add_filter('wpseo_opengraph_type', array($this, 'opengraph_type'), 10, 2);
-        add_filter('wpseo_opengraph_title', array($this, 'opengraph_title'), 10, 2);
-        add_filter('wpseo_opengraph_desc', array($this, 'opengraph_description'), 10, 2);
-        add_filter('wpseo_opengraph_url', array($this, 'opengraph_url'), 10, 2);
-        add_filter('wpseo_opengraph_image', array($this, 'opengraph_image'), 10, 2);
-
-        // Twitter card meta tags
-        add_filter('wpseo_twitter_title', array($this, 'twitter_title'), 10, 2);
-        add_filter('wpseo_twitter_description', array($this, 'twitter_description'), 10, 2);
-        add_filter('wpseo_twitter_image', array($this, 'twitter_image'), 10, 2);
-
-        // XML sitemap integration
-        add_filter('wpseo_sitemap_index', array($this, 'add_businesses_to_sitemap'));
-        add_filter('wpseo_sitemap_businesses_content', array($this, 'build_businesses_sitemap'));
-        
-        // Add SEO fields to business post type
+    public function __construct() {
+        add_action('wp_head', array($this, 'add_meta_tags'));
+        add_filter('wpseo_sitemap_entry', array($this, 'yoast_sitemap_entry'), 10, 3);
+        add_action('init', array($this, 'init_labels'));
         add_action('add_meta_boxes', array($this, 'add_seo_metabox'));
         add_action('save_post', array($this, 'save_seo_metabox'), 10, 2);
+    }
+
+    public function init_labels() {
+        $this->meta_fields = array(
+            '_gpd_seo_title' => array(
+                'label' => __('SEO Title', 'google-places-directory'),
+                'description' => __('Custom title for search engines and social media.', 'google-places-directory')
+            ),
+            '_gpd_seo_description' => array(
+                'label' => __('SEO Description', 'google-places-directory'),
+                'description' => __('Custom description for search engines and social media.', 'google-places-directory')
+            ),
+            '_gpd_business_type' => array(
+                'label' => __('Business Type', 'google-places-directory'),
+                'description' => __('Schema.org business type for better search engine understanding.', 'google-places-directory')
+            )
+        );
     }
 
     /**

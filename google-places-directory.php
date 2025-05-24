@@ -46,12 +46,20 @@ if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
 
 // Initialize the plugin
 function gpd_init() {
-    // Register post types and taxonomies
-    GPD_CPT::instance();
+    // Register post types and taxonomies at the earliest point in init hook
+    add_action('init', function() {
+        GPD_CPT::instance();
+    }, -10);
     
+    // Wait for init to load the rest of the components
+    add_action('init', 'gpd_load_components', 5);
+}
+
+function gpd_load_components() {
     // Load settings
     GPD_Settings::instance();
-      // Load importer, import/export, and SEO functionality
+    
+    // Load importer, import/export, and SEO functionality
     GPD_Importer::instance();
     GPD_Import_Export::instance();
     GPD_SEO::instance();
@@ -62,25 +70,34 @@ function gpd_init() {
     // Load shortcodes
     GPD_Shortcodes::instance();
     
+    // Load documentation
+    GPD_Docs::instance();
+    
     // Load photo manager only if extension plugin is not active
-    if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
+    if (!function_exists('gpdpm_is_active') || !gpdpm_is_active()) {
         GPD_Photo_Manager::instance();
     }
-    
-    // Load text domain
-    load_plugin_textdomain( 'google-places-directory', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 }
-add_action( 'plugins_loaded', 'gpd_init' );
+add_action('plugins_loaded', 'gpd_init', 0);
+
+// Load text domain on init hook as recommended by WordPress
+add_action('init', function() {
+    load_plugin_textdomain('google-places-directory', false, dirname(plugin_basename(__FILE__)) . '/languages');
+});
 
 // Plugin activation hook
 register_activation_hook( __FILE__, 'gpd_activate' );
 
 // Plugin activation function
 function gpd_activate() {
-    // Make sure post types are registered for flushing
-    GPD_CPT::instance();
+    // Clear any transients or caches
+    delete_transient('gpd_api_request_count');
     
-    // Flush rewrite rules
+    // Make sure post types are registered before flushing rewrite rules
+    $cpt = GPD_CPT::instance();
+    $cpt->register_post_types_and_taxonomies();
+    
+    // Flush rewrite rules to ensure proper URL handling
     flush_rewrite_rules();
 }
 /**

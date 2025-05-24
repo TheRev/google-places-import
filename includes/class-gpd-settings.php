@@ -12,17 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class GPD_Settings {
     private static $instance = null;
+    private $settings = array();
+    private $options_group = 'gpd_settings';
+    private $options_page = 'gpd-settings';
 
     public static function instance() {
         if ( self::$instance === null ) {
             self::$instance = new self();
-            self::$instance->init_hooks();
         }
         return self::$instance;
     }
 
-    private function init_hooks() {
+    public function __construct() {
         add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
+        add_action( 'admin_init', array( $this, 'init_settings' ) );
+        add_action( 'init', array( $this, 'init_labels' ) );
         add_action( 'admin_post_gpd_save_settings', array( $this, 'save_settings' ) );
     }
 
@@ -183,6 +187,63 @@ class GPD_Settings {
 
         wp_redirect( $redirect_url );
         exit;
+    }
+
+    public function init_settings() {
+        register_setting( $this->options_group, 'gpd_api_key' );
+        register_setting( $this->options_group, 'gpd_photo_limit', array(
+            'type' => 'integer',
+            'default' => 3
+        ) );
+
+        add_settings_section(
+            'gpd_main_section',
+            __( 'Main Settings', 'google-places-directory' ),
+            null,
+            $this->options_page
+        );
+
+        add_settings_field(
+            'gpd_api_key',
+            __( 'Google Places API Key', 'google-places-directory' ),
+            array( $this, 'render_api_key_field' ),
+            $this->options_page,
+            'gpd_main_section'
+        );
+
+        add_settings_field(
+            'gpd_photo_limit',
+            __( 'Photo Import Limit', 'google-places-directory' ),
+            array( $this, 'render_photo_limit_field' ),
+            $this->options_page,
+            'gpd_main_section'
+        );
+    }
+
+    public function init_labels() {
+        $this->settings = array(
+            'gpd_api_key' => array(
+                'label' => __( 'Google Places API Key', 'google-places-directory' ),
+                'description' => __( 'Enter your Google Places API key', 'google-places-directory' )
+            ),
+            'gpd_photo_limit' => array(
+                'label' => __( 'Photo Import Limit', 'google-places-directory' ),
+                'description' => __( 'Maximum number of photos to import per business (0 = none)', 'google-places-directory' )
+            ),
+            // ...other settings...
+        );
+    }
+
+    public function render_api_key_field() {
+        $value = get_option( 'gpd_api_key', '' );
+        echo '<input type="text" name="gpd_api_key" value="' . esc_attr( $value ) . '" class="regular-text">';
+        echo '<p class="description">' . esc_html( $this->settings['gpd_api_key']['description'] ) . '</p>';
+    }
+
+    public function render_photo_limit_field() {
+        $value = get_option( 'gpd_photo_limit', 3 );
+        echo '<input type="number" name="gpd_photo_limit" value="' . esc_attr( $value ) . '" min="0" max="10">';
+        echo '<p class="description">' . esc_html( $this->settings['gpd_photo_limit']['description'] ) . '</p>';
     }
 }
 

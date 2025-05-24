@@ -5,11 +5,16 @@
 ## Features
 
 - **Search Google Places**: Use the WordPress admin to search for businesses using keywords and location.
-- **Bulk Import**: Quickly import multiple businesses and their details into your custom post type (`business`).
+- **Smart Bulk Import**: Efficiently import multiple businesses with batch processing and progress tracking.
+- **Enhanced Error Handling**: Detailed error reporting and automatic retry for transient failures.
+- **Rate Limit Protection**: Smart batching and delays to prevent API quota issues.
 - **Taxonomy Support**: Automatically organizes imported businesses by destination (city/locality) and region.
 - **Duplicate Detection**: Flags already-imported businesses to prevent duplicates.
+- **Optimized Photo Import**: Parallel photo processing with configurable batch sizes.
+- **Real-time Progress**: Live progress tracking for both business and photo imports.
+- **Background Processing**: Long-running imports handled in the background.
 - **Customizable Radius & Limit**: Control the search area and number of results per request.
-- **Admin UI**: Simple, modern admin user interface for searching and importing.
+- **Modern Admin UI**: Responsive interface with live updates and error reporting.
 - **Safe & Secure**: Uses WordPress security best practices.
 
 ## Requirements

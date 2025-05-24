@@ -55,8 +55,94 @@ function gpd_render_developer_docs() {
                     <td><?php _e('Modify search query arguments', 'google-places-directory'); ?></td>
                     <td><code>$args, $params</code></td>
                 </tr>
+                <tr>
+                    <td><code>gpd_photo_batch_size</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control the number of photos processed in parallel', 'google-places-directory'); ?></td>
+                    <td><code>$batch_size (default: 3)</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_photo_batch_delay</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control the delay between photo batches in seconds', 'google-places-directory'); ?></td>
+                    <td><code>$delay_seconds (default: 1)</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_import_chunk_size</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control the number of businesses processed in parallel', 'google-places-directory'); ?></td>
+                    <td><code>$chunk_size (default: 5)</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_photo_download_retries</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control the number of retry attempts for failed photo downloads', 'google-places-directory'); ?></td>
+                    <td><code>$retries (default: 2)</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_should_process_photos_internally</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control whether photos are processed by the core plugin', 'google-places-directory'); ?></td>
+                    <td><code>$should_process, $post_id, $details</code></td>
+                </tr>
             </tbody>
         </table>
+
+        <h3><?php esc_html_e('Error Handling', 'google-places-directory'); ?></h3>
+        <p><?php _e('The plugin provides structured error handling with the following error codes:', 'google-places-directory'); ?></p>
+        <ul>
+            <li><code>api_key_missing</code> - <?php _e('API key not configured', 'google-places-directory'); ?></li>
+            <li><code>api_request_failed</code> - <?php _e('API request failed (network/server error)', 'google-places-directory'); ?></li>
+            <li><code>invalid_response</code> - <?php _e('Invalid API response format', 'google-places-directory'); ?></li>
+            <li><code>rate_limit</code> - <?php _e('API rate limit exceeded', 'google-places-directory'); ?></li>
+            <li><code>permission_denied</code> - <?php _e('API key permissions issue', 'google-places-directory'); ?></li>
+            <li><code>invalid_request</code> - <?php _e('Invalid API request parameters', 'google-places-directory'); ?></li>
+        </ul>
+        
+        <h3><?php esc_html_e('Batch Processing', 'google-places-directory'); ?></h3>
+        <p><?php _e('Access batch processing status and metadata:', 'google-places-directory'); ?></p>
+        <div class="gpd-shortcode-example">
+// Get batch status
+$status = GPD_Importer::instance()->get_batch_status($batch_id);
+
+// Status structure:
+$status = [
+    'status' => 'processing|completed',  // Current status
+    'total' => 10,                       // Total items
+    'processed' => 5,                    // Items processed
+    'timestamp' => '2025-05-22 10:00:00' // Last update
+];
+
+// For completed batches, additional data:
+$status['results'] = [
+    'created' => 3,    // New businesses
+    'updated' => 2,    // Updated businesses
+    'failed' => 0,     // Failed imports
+    'errors' => []     // Detailed errors
+];
+        </div>
+
+        <h3><?php esc_html_e('Rate Limiting', 'google-places-directory'); ?></h3>
+        <p><?php _e('The plugin includes smart rate limiting for API requests:', 'google-places-directory'); ?></p>
+        <ul>
+            <li><?php _e('Automatic retry for transient failures', 'google-places-directory'); ?></li>
+            <li><?php _e('Configurable delays between batches', 'google-places-directory'); ?></li>
+            <li><?php _e('Parallel processing with limits', 'google-places-directory'); ?></li>
+            <li><?php _e('Progress tracking and status updates', 'google-places-directory'); ?></li>
+        </ul>
+
+        <h3><?php esc_html_e('Background Processing', 'google-places-directory'); ?></h3>
+        <p><?php _e('Monitor background process status:', 'google-places-directory'); ?></p>
+        <div class="gpd-shortcode-example">
+add_action('gpd_after_batch_processed', 'my_batch_handler');
+
+function my_batch_handler($batch_id) {
+    $status = GPD_Importer::instance()->get_batch_status($batch_id);
+    if ($status['status'] === 'completed') {
+        // Handle completion
+    }
+}
+        </div>
         
         <h3><?php esc_html_e('Custom Field API', 'google-places-directory'); ?></h3>
         <p><?php _e('Register custom fields programmatically:', 'google-places-directory'); ?></p>

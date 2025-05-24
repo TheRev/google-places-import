@@ -17,6 +17,7 @@ add_action( 'admin_enqueue_scripts', function() {
 
 class GPD_Admin_UI {
     private static $instance = null;
+    const PROGRESS_TRANSIENT_PREFIX = 'gpd_import_progress_';
 
     public static function instance() {
         if ( self::$instance === null ) {
@@ -27,10 +28,11 @@ class GPD_Admin_UI {
     }
 
     private function init_hooks() {
-        add_action( 'admin_menu', [ $this, 'add_admin_pages' ] );
-        add_action( 'admin_post_gpd_import', [ $this, 'handle_import' ] );
-        add_action( 'admin_notices', [ $this, 'display_import_notices' ] );
-        
+        // Add menu items after post type is registered
+        add_action('admin_menu', array($this, 'add_admin_pages'), 20);
+        add_action('admin_post_gpd_import', array($this, 'handle_import'));
+        add_action('admin_notices', array($this, 'display_import_notices'));
+
         // Add column to business post type admin list
         add_filter('manage_business_posts_columns', array($this, 'add_photo_count_column'));
         add_action('manage_business_posts_custom_column', array($this, 'render_photo_count_column'), 10, 2);
@@ -45,6 +47,22 @@ class GPD_Admin_UI {
         
         // Add admin styles
         add_action('admin_head', array($this, 'add_admin_styles'));
+    }
+
+    public function ajax_check_import_progress() {
+        check_ajax_referer('gpd_import_action', 'nonce');
+        
+        $batch_id = sanitize_text_field($_POST['batch_id'] ?? '');
+        if (!$batch_id) {
+            wp_send_json_error('Invalid batch ID');
+        }
+        
+        $progress = GPD_Importer::instance()->get_batch_progress($batch_id);
+        if (!$progress) {
+            wp_send_json_error('Batch not found');
+        }
+        
+        wp_send_json_success($progress);
     }
 
     /**
@@ -343,8 +361,8 @@ class GPD_Admin_UI {
         if (!$screen || $screen->id !== 'business_page_gpd-import') {
             return;
         }
-        
-        // Show success message if businesses were imported
+
+        // Display success message for imported businesses
         if (isset($_GET['created']) || isset($_GET['updated'])) {
             $created = isset($_GET['created']) ? intval($_GET['created']) : 0;
             $updated = isset($_GET['updated']) ? intval($_GET['updated']) : 0;
@@ -353,14 +371,14 @@ class GPD_Admin_UI {
             if ($total > 0) {
                 $message = sprintf(
                     _n(
-                        '%d business imported successfully.', 
+                        '%d business imported successfully.',
                         '%d businesses imported successfully.',
-                        $total, 
+                        $total,
                         'google-places-directory'
                     ),
                     $total
                 );
-                
+
                 // Add details about created vs updated
                 if ($created > 0 && $updated > 0) {
                     $message .= ' ' . sprintf(
@@ -369,52 +387,42 @@ class GPD_Admin_UI {
                         $updated
                     );
                 }
-                
-                // Add info about photo import if photo limit is set
-                $photo_limit = (int) get_option('gpd_photo_limit', 3);
+
+                // Add info about photo import if enabled
+                $photo_limit = (int)get_option('gpd_photo_limit', 3);
                 if ($photo_limit > 0) {
                     $message .= ' ' . sprintf(
                         _n(
-                            'Up to %d photo imported per business with featured image set.',
-                            'Up to %d photos imported per business with featured images set.',
+                            'Up to %d photo imported per business.',
+                            'Up to %d photos imported per business.',
                             $photo_limit,
                             'google-places-directory'
                         ),
                         $photo_limit
                     );
                 }
-                
-                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($message) . '</p></div>';
+
+                echo '<div class="notice notice-success is-dismissible"><p>' . 
+                    esc_html($message) . '</p></div>';
             }
         }
-        
-        // Show API migration notice only once per session
-        if (!isset($_COOKIE['gpd_api_notice_shown'])) {
+
+        // Show API errors
+        if (!empty($_GET['error'])) {
+            $error_message = urldecode($_GET['error']);
+            echo '<div class="notice notice-error"><p>' . 
+                esc_html($error_message) . '</p>';
             ?>
-            <div class="notice notice-info is-dismissible">
-                <p>
-                    <strong><?php _e('Google Places API Update:', 'google-places-directory'); ?></strong>
-                    <?php _e('This plugin now uses the new Google Places API v1. Results may look slightly different from previous versions.', 'google-places-directory'); ?>
-                </p>
+            <p><?php _e('API Error Troubleshooting:', 'google-places-directory'); ?></p>
+            <ol>
+                <li><?php _e('Ensure Places API v1 is enabled for your project', 'google-places-directory'); ?></li>
+                <li><?php _e('Verify that "Place Details - Advanced" or "Higher Data Freshness" SKU is enabled', 'google-places-directory'); ?></li>
+                <li><?php _e('Check that your API key has permissions to access Places API v1', 'google-places-directory'); ?></li>
+                <li><?php _e('Make sure your billing account is properly configured', 'google-places-directory'); ?></li>
+            </ol>
             </div>
             <?php
-            // Set cookie to avoid showing the notice on every page load
-            setcookie('gpd_api_notice_shown', '1', time() + DAY_IN_SECONDS, ADMIN_COOKIE_PATH);
         }
-        
-        // Add new notice about API v1 SKU requirements
-        ?>
-        <div class="notice notice-warning is-dismissible">
-            <p>
-                <strong><?php _e('Google Places API v1 Requirements:', 'google-places-directory'); ?></strong>
-                <?php _e('This plugin requires the Places API v1 with "Place Details - Advanced" or "Place Details - Higher Data Freshness" SKU enabled.', 'google-places-directory'); ?>
-            </p>
-            <p>
-                <?php _e('If you see errors about "Cannot find matching fields for path \'geometry.location\'" when importing businesses, you need to enable one of these higher-tier SKUs in your Google Cloud Console.', 'google-places-directory'); ?>
-                <a href="https://console.cloud.google.com/apis/library/places.googleapis.com" target="_blank"><?php _e('Open Google Cloud Console', 'google-places-directory'); ?></a>
-            </p>
-        </div>
-        <?php
     }
 
     public function add_admin_pages() {
@@ -774,66 +782,177 @@ class GPD_Admin_UI {
         <?php
     }
 
+    /**
+     * Handle import with progress tracking
+     */
     public function handle_import() {
-        if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_import_action', 'gpd_import_nonce' ) ) {
-            wp_die( __( 'Permission denied', 'google-places-directory' ) );
+        if (!current_user_can('manage_options') || !check_admin_referer('gpd_import_action', 'gpd_import_nonce')) {
+            wp_die(__('Permission denied', 'google-places-directory'));
         }
 
-        $query          = sanitize_text_field( $_POST['query'] );
-        $radius         = intval( $_POST['radius'] );
-        $limit          = intval( $_POST['limit'] );
-        $incoming_token = sanitize_text_field( $_POST['pagetoken'] ?? '' );
-        $prev_token     = sanitize_text_field( $_POST['prevtok'] ?? '' );
-
-        // Initialize by-reference pagination token
+        $query = sanitize_text_field($_POST['query']);
+        $radius = intval($_POST['radius']);
+        $limit = intval($_POST['limit']);
+        $incoming_token = sanitize_text_field($_POST['pagetoken'] ?? '');
+        
+        // Get places from API
         $next_page_token = '';
-
         $places_result = GPD_Importer::instance()->import_places(
             $query,
             $radius * 1000,
             $limit,
-            $next_page_token,
+            $next_page_token, 
             $incoming_token
         );
         
-        // Handle potential errors
+        // Handle API errors
         if (is_wp_error($places_result)) {
             $redirect_url = add_query_arg([
-                'post_type'  => 'business',
-                'page'       => 'gpd-import',
-                'query'      => $query,
-                'radius'     => $radius,
-                'limit'      => $limit,
-                'error'      => urlencode($places_result->get_error_message()),
-            ], admin_url( 'edit.php' ));
+                'post_type' => 'business',
+                'page' => 'gpd-import',
+                'query' => $query,
+                'radius' => $radius,
+                'limit' => $limit,
+                'error' => urlencode($places_result->get_error_message())
+            ], admin_url('edit.php'));
             
             wp_redirect($redirect_url);
             exit;
         }
-        
-        $places = $places_result;
-        $selected  = array_keys( $_POST['places'] ?? [] );
+
+        // Get selected places
+        $selected = array_keys($_POST['places'] ?? []);
         $to_import = [];
-        foreach ( $selected as $i ) {
-            if ( isset( $places[ $i ] ) ) {
-                $to_import[] = $places[ $i ];
+        foreach ($selected as $i) {
+            if (isset($places_result[$i])) {
+                $to_import[] = $places_result[$i];
             }
         }
 
-        $result = GPD_Importer::instance()->process_import( $to_import );
-        $redirect_url = add_query_arg([
-            'post_type'  => 'business',
-            'page'       => 'gpd-import',
-            'query'      => $query,
-            'radius'     => $radius,
-            'limit'      => $limit,
-            'pagetoken'  => $incoming_token,
-            'prevtok'    => $prev_token,
-            'updated'    => $result['updated'],
-            'created'    => $result['created'],
-        ], admin_url( 'edit.php' ) );
+        // Process the selected places
+        $result = GPD_Importer::instance()->process_import($to_import);
 
-        wp_redirect( $redirect_url );
+        // Redirect back with results
+        $redirect_url = add_query_arg([
+            'post_type' => 'business',
+            'page' => 'gpd-import',
+            'query' => $query,
+            'radius' => $radius,
+            'limit' => $limit,
+            'created' => $result['created'],
+            'updated' => $result['updated']
+        ], admin_url('edit.php'));
+
+        wp_redirect($redirect_url);
         exit;
+    }
+
+    /**
+     * Display import progress
+     */
+    private function display_import_progress($batch_id) {
+        $status = GPD_Importer::instance()->get_batch_status($batch_id);
+        
+        if (!$status) {
+            echo '<div class="notice notice-error"><p>' . 
+                esc_html__('Import batch not found or expired.', 'google-places-directory') . 
+                '</p></div>';
+            return;
+        }
+
+        $percent = ($status['total'] > 0) 
+            ? round(($status['processed'] / $status['total']) * 100) 
+            : 0;
+
+        ?>
+        <div class="gpd-import-progress">
+            <h2><?php esc_html_e('Import Progress', 'google-places-directory'); ?></h2>
+            
+            <div class="gpd-progress-bar">
+                <div class="gpd-progress-complete" style="width: <?php echo esc_attr($percent); ?>%">
+                    <?php echo esc_html($percent); ?>%
+                </div>
+            </div>
+            
+            <p class="gpd-progress-stats">
+                <?php
+                printf(
+                    esc_html__('Processing %1$d of %2$d businesses...', 'google-places-directory'),
+                    $status['processed'],
+                    $status['total']
+                );
+                ?>
+            </p>
+
+            <?php if ($status['status'] === 'completed'): ?>
+                <div class="notice notice-success">
+                    <p>
+                        <?php
+                        printf(
+                            esc_html__('Import completed: %1$d created, %2$d updated, %3$d failed', 'google-places-directory'),
+                            $status['results']['created'],
+                            $status['results']['updated'],
+                            $status['results']['failed']
+                        );
+                        ?>
+                    </p>
+                    <?php if (!empty($status['results']['errors'])): ?>
+                        <div class="gpd-import-errors">
+                            <h4><?php esc_html_e('Import Errors:', 'google-places-directory'); ?></h4>
+                            <ul>
+                                <?php foreach ($status['results']['errors'] as $error): ?>
+                                    <li>
+                                        <?php
+                                        printf(
+                                            esc_html__('Place ID %1$s: %2$s', 'google-places-directory'),
+                                            esc_html($error['place_id']),
+                                            esc_html($error['error'])
+                                        );
+                                        ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <p class="description">
+                    <?php esc_html_e('The import is running in the background. You can leave this page and come back later.', 'google-places-directory'); ?>
+                </p>
+                <script>
+                    jQuery(document).ready(function($) {
+                        function updateProgress() {
+                            $.ajax({
+                                url: ajaxurl,
+                                data: {
+                                    action: 'gpd_check_import_progress',
+                                    batch_id: '<?php echo esc_js($batch_id); ?>',
+                                    nonce: '<?php echo wp_create_nonce('gpd_import_progress'); ?>'
+                                },
+                                success: function(response) {
+                                    if (response.success && response.data) {
+                                        if (response.data.status === 'completed') {
+                                            window.location.reload();
+                                        } else {
+                                            $('.gpd-progress-complete').css('width', response.data.percent + '%')
+                                                .text(response.data.percent + '%');
+                                            $('.gpd-progress-stats').text(
+                                                '<?php esc_html_e('Processing', 'google-places-directory'); ?> ' + 
+                                                response.data.processed + ' <?php esc_html_e('of', 'google-places-directory'); ?> ' + 
+                                                response.data.total + ' <?php esc_html_e('businesses...', 'google-places-directory'); ?>'
+                                            );
+                                            setTimeout(updateProgress, 2000);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+
+                        updateProgress();
+                    });
+                </script>
+            <?php endif; ?>
+        </div>
+        <?php
     }
 }
