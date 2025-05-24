@@ -13,36 +13,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class GPD_Docs {
-    private $tabs = array();
     private static $instance = null;
+    private $tabs = array();
 
     public static function instance() {
-        if (self::$instance === null) {
+        if ( self::$instance === null ) {
             self::$instance = new self();
+            self::$instance->init_hooks();
         }
         return self::$instance;
     }
 
-    public function __construct() {
-        // Register hooks
-        add_action('admin_menu', array($this, 'add_docs_page'));
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_styles'));
-        add_action('init', array($this, 'register_tabs'));
-    }
-
-    // Move tab registration to a separate method called on init
-    public function register_tabs() {
-        require_once dirname(__FILE__) . '/docs/custom-fields.php';
-        require_once dirname(__FILE__) . '/docs/shortcodes.php';
-        require_once dirname(__FILE__) . '/docs/developer.php';
+    private function init_hooks() {
+        add_action( 'admin_menu', array( $this, 'add_docs_pages' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
         
-        // Register core tabs
-        $this->register_tab('get-started', __('Getting Started', 'google-places-directory'), array($this, 'render_settings_docs'), 10);
-        $this->register_tab('photos', __('Photo Management', 'google-places-directory'), array($this, 'render_photos_docs'), 20);
-        $this->register_tab('shortcodes', __('Shortcodes', 'google-places-directory'), 'gpd_render_shortcodes_docs', 30);
-        $this->register_tab('custom-fields', __('Custom Fields', 'google-places-directory'), 'gpd_render_custom_fields_docs', 40);
-        $this->register_tab('fse', __('Full Site Editing', 'google-places-directory'), array($this, 'render_fse_docs'), 50);
-        $this->register_tab('api', __('API Information', 'google-places-directory'), array($this, 'render_api_docs'), 60);
+        // Register default tabs
+        $this->register_default_tabs();
+        
+        // Allow add-ons to register their tabs (priority 20 gives add-ons time to initialize)
+        add_action( 'init', array( $this, 'finalize_tabs' ), 20 );
     }
     
     /**
@@ -66,6 +56,18 @@ class GPD_Docs {
         );
         
         return true;
+    }
+    
+    /**
+     * Register built-in documentation tabs
+     */
+    private function register_default_tabs() {
+        // Register core tabs
+        $this->register_tab( 'shortcodes', __('Shortcodes', 'google-places-directory'), array( $this, 'render_shortcodes_docs' ), 10 );
+        $this->register_tab( 'photos', __('Business Photos', 'google-places-directory'), array( $this, 'render_photos_docs' ), 20 );
+        $this->register_tab( 'settings', __('Settings', 'google-places-directory'), array( $this, 'render_settings_docs' ), 30 );
+        $this->register_tab( 'fse', __('Full Site Editing', 'google-places-directory'), array( $this, 'render_fse_docs' ), 40 );
+        $this->register_tab( 'api', __('API Information', 'google-places-directory'), array( $this, 'render_api_docs' ), 50 );
     }
     
     /**
@@ -134,7 +136,7 @@ class GPD_Docs {
     /**
      * Add documentation pages to the admin menu
      */
-    public function add_docs_page() {
+    public function add_docs_pages() {
         add_submenu_page(
             'edit.php?post_type=business',
             __( 'Documentation', 'google-places-directory' ),
@@ -319,11 +321,159 @@ class GPD_Docs {
     /**
      * Render shortcodes documentation
      */
-    /** @deprecated 2.6.0 Moved to separate file */
     private function render_shortcodes_docs() {
-        if (function_exists('gpd_render_shortcodes_docs')) {
-            gpd_render_shortcodes_docs();
-        }
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Available Shortcodes', 'google-places-directory' ); ?></h2>
+            <p><?php _e( 'Google Places Directory provides several shortcodes to display business information on your website:', 'google-places-directory' ); ?></p>
+            
+            <ul>
+                <li><code>[gpd-photos]</code> - <?php _e('Display business photos (see the Business Photos tab for details)', 'google-places-directory'); ?></li>
+                <li><code>[gpd-business-search]</code> - <?php _e('Create a search form for businesses', 'google-places-directory'); ?></li>
+                <li><code>[gpd-business-map]</code> - <?php _e('Display businesses on a map', 'google-places-directory'); ?></li>
+            </ul>
+            
+            <?php do_action( 'gpd_docs_shortcodes_overview' ); ?>
+        </div>
+        
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Business Search', 'google-places-directory' ); ?></h2>
+            <p><?php _e( 'Use the <code>[gpd-business-search]</code> shortcode to create a search form for businesses.', 'google-places-directory' ); ?></p>
+            
+            <h3><?php esc_html_e( 'Parameters', 'google-places-directory' ); ?></h3>
+            <table class="widefat" style="width: 95%">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>show_map</code></td>
+                        <td><?php esc_html_e( 'Show map with search results', 'google-places-directory' ); ?></td>
+                        <td>false</td>
+                        <td>true, false</td>
+                    </tr>
+                    <tr>
+                        <td><code>location_search</code></td>
+                        <td><?php esc_html_e( 'Enable location-based search', 'google-places-directory' ); ?></td>
+                        <td>true</td>
+                        <td>true, false</td>
+                    </tr>
+                    <tr>
+                        <td><code>results_page</code></td>
+                        <td><?php esc_html_e( 'URL to results page (empty for AJAX)', 'google-places-directory' ); ?></td>
+                        <td>empty</td>
+                        <td><?php esc_html_e( 'Any valid URL', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>default_radius</code></td>
+                        <td><?php esc_html_e( 'Default search radius in km', 'google-places-directory' ); ?></td>
+                        <td>25</td>
+                        <td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>default_limit</code></td>
+                        <td><?php esc_html_e( 'Default number of results', 'google-places-directory' ); ?></td>
+                        <td>10</td>
+                        <td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>placeholder</code></td>
+                        <td><?php esc_html_e( 'Placeholder text for search field', 'google-places-directory' ); ?></td>
+                        <td>Search for businesses...</td>
+                        <td><?php esc_html_e( 'Any text', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>class</code></td>
+                        <td><?php esc_html_e( 'Additional CSS classes', 'google-places-directory' ); ?></td>
+                        <td>empty</td>
+                        <td><?php esc_html_e( 'Any CSS class name', 'google-places-directory' ); ?></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <?php do_action( 'gpd_docs_business_search_after_parameters' ); ?>
+            
+            <h3><?php esc_html_e( 'Examples', 'google-places-directory' ); ?></h3>
+            <div class="gpd-shortcode-example">[gpd-business-search show_map="true" location_search="true"]</div>
+            <div class="gpd-shortcode-example">[gpd-business-search results_page="/business-results/" default_radius="50"]</div>
+            
+            <?php do_action( 'gpd_docs_business_search_after_examples' ); ?>
+        </div>
+        
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e( 'Business Map', 'google-places-directory' ); ?></h2>
+            <p><?php _e( 'Use the <code>[gpd-business-map]</code> shortcode to display businesses on a map.', 'google-places-directory' ); ?></p>
+            
+            <h3><?php esc_html_e( 'Parameters', 'google-places-directory' ); ?></h3>
+            <table class="widefat" style="width: 95%">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Parameter', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Description', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Default', 'google-places-directory' ); ?></th>
+                        <th><?php esc_html_e( 'Options', 'google-places-directory' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>id</code></td>
+                        <td><?php esc_html_e( 'The business post ID (0 for all businesses)', 'google-places-directory' ); ?></td>
+                        <td>0</td>
+                        <td><?php esc_html_e( 'Any valid business post ID', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>category</code></td>
+                        <td><?php esc_html_e( 'Filter by business category slug', 'google-places-directory' ); ?></td>
+                        <td>empty</td>
+                        <td><?php esc_html_e( 'Any valid category slug', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>limit</code></td>
+                        <td><?php esc_html_e( 'Maximum number of businesses to show', 'google-places-directory' ); ?></td>
+                        <td>100</td>
+                        <td><?php esc_html_e( 'Any positive number', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>height</code></td>
+                        <td><?php esc_html_e( 'Map height', 'google-places-directory' ); ?></td>
+                        <td>400px</td>
+                        <td><?php esc_html_e( 'Any valid CSS height value', 'google-places-directory' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>zoom</code></td>
+                        <td><?php esc_html_e( 'Default zoom level', 'google-places-directory' ); ?></td>
+                        <td>14</td>
+                        <td>1-20</td>
+                    </tr>
+                    <tr>
+                        <td><code>clustering</code></td>
+                        <td><?php esc_html_e( 'Use marker clustering for multiple markers', 'google-places-directory' ); ?></td>
+                        <td>true</td>
+                        <td>true, false</td>
+                    </tr>
+                    <tr>
+                        <td><code>class</code></td>
+                        <td><?php esc_html_e( 'Additional CSS classes', 'google-places-directory' ); ?></td>
+                        <td>empty</td>
+                        <td><?php esc_html_e( 'Any CSS class name', 'google-places-directory' ); ?></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <?php do_action( 'gpd_docs_business_map_after_parameters' ); ?>
+            
+            <h3><?php esc_html_e( 'Examples', 'google-places-directory' ); ?></h3>
+            <div class="gpd-shortcode-example">[gpd-business-map id="123" height="500px" zoom="15"]</div>
+            <div class="gpd-shortcode-example">[gpd-business-map category="restaurants" limit="50" clustering="true"]</div>
+            
+            <?php do_action( 'gpd_docs_business_map_after_examples' ); ?>
+        </div>
+        <?php
     }
     
     /**
