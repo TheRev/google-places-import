@@ -207,6 +207,60 @@ document.addEventListener('gpd:searchComplete', function(e) {
 });
         </div>
         
+        <h3><?php esc_html_e('Image Tools API', 'google-places-directory'); ?></h3>
+        <p><?php _e('The Image Tools system provides several hooks for customization:', 'google-places-directory'); ?></p>
+        <table class="widefat" style="width: 95%">
+            <thead>
+                <tr>
+                    <th><?php esc_html_e('Hook', 'google-places-directory'); ?></th>
+                    <th><?php esc_html_e('Type', 'google-places-directory'); ?></th>
+                    <th><?php esc_html_e('Description', 'google-places-directory'); ?></th>
+                    <th><?php esc_html_e('Parameters', 'google-places-directory'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>gpd_before_fix_featured_image</code></td>
+                    <td>Action</td>
+                    <td><?php _e('Fires before attempting to fix a featured image', 'google-places-directory'); ?></td>
+                    <td><code>$post_id</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_after_fix_featured_image</code></td>
+                    <td>Action</td>
+                    <td><?php _e('Fires after attempting to fix a featured image', 'google-places-directory'); ?></td>
+                    <td><code>$post_id, $success</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_featured_image_fixer_batch_size</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control the number of businesses processed in each batch', 'google-places-directory'); ?></td>
+                    <td><code>$batch_size (default: 25)</code></td>
+                </tr>
+                <tr>
+                    <td><code>gpd_should_run_daily_image_fix</code></td>
+                    <td>Filter</td>
+                    <td><?php _e('Control whether the daily automatic image fix runs', 'google-places-directory'); ?></td>
+                    <td><code>$should_run (default: true)</code></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p><?php _e('Example of customizing the Image Tools:', 'google-places-directory'); ?></p>
+        <div class="gpd-shortcode-example">
+// Increase batch size for image fixing
+add_filter('gpd_featured_image_fixer_batch_size', function($size) {
+    return 50; // Process 50 businesses at a time
+});
+
+// Log when images are fixed
+add_action('gpd_after_fix_featured_image', function($post_id, $success) {
+    if ($success) {
+        error_log("Fixed featured image for business {$post_id}");
+    }
+}, 10, 2);
+        </div>
+
         <?php do_action('gpd_docs_developer_after'); ?>
     </div>
     <?php

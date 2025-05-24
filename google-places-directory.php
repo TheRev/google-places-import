@@ -43,6 +43,7 @@ require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-docs.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-shortcodes.php';
 require_once GPD_PLUGIN_DIR . 'includes/class-gpd-import-export.php';
+require_once GPD_PLUGIN_DIR . 'includes/class-gpd-featured-image-fixer.php';
 
 // Load documentation files
 require_once GPD_PLUGIN_DIR . 'includes/docs/shortcodes.php';
@@ -90,6 +91,9 @@ function gpd_load_components() {
     if (!function_exists('gpdpm_is_active') || !gpdpm_is_active()) {
         GPD_Photo_Manager::instance();
     }
+    
+    // Load featured image fixer
+    GPD_Featured_Image_Fixer::instance();
 }
 add_action('plugins_loaded', 'gpd_init', 0);
 

@@ -739,11 +739,27 @@ class GPD_Importer {
             // Handle taxonomy
             if ($locality) {
                 $this->handle_locality_taxonomy($post_id, $locality);
-            }
-
-            // Handle photos if enabled
+            }            // Handle photos if enabled
             if (get_option('gpd_photo_limit', 3) > 0) {
                 $this->handle_photos($post_id, $details);
+                
+                // Double-check that a featured image was set
+                if (!get_post_thumbnail_id($post_id)) {
+                    // Try to find the first valid attachment for this post
+                    $attachments = get_posts(array(
+                        'post_type' => 'attachment',
+                        'posts_per_page' => 1,
+                        'post_parent' => $post_id,
+                        'meta_key' => '_gpd_photo_reference',
+                        'orderby' => 'ID',
+                        'order' => 'ASC'
+                    ));
+                    
+                    if (!empty($attachments)) {
+                        error_log('Setting featured image through fallback method for business ' . $post_id);
+                        set_post_thumbnail($post_id, $attachments[0]->ID);
+                    }
+                }
             }
 
             return [
@@ -859,10 +875,16 @@ class GPD_Importer {
                 $attach_id = $this->import_photo($photo_ref, $post_id, $details['name'], $count + 1);
             }
             
-            // Set first photo as featured image
-            if ($attach_id && $count === 0) {
-                set_post_thumbnail($post_id, $attach_id);
-                $featured_image_id = $attach_id;
+            // Always set first successfully imported photo as featured image
+            if ($attach_id && !$featured_image_id) {
+                $result = set_post_thumbnail($post_id, $attach_id);
+                if ($result) {
+                    $featured_image_id = $attach_id;
+                    // Store the featured photo ID as backup
+                    update_post_meta($post_id, '_gpd_featured_photo_id', $attach_id);
+                } else {
+                    error_log('GPD: Failed to set featured image for business ' . $post_id . ' using attachment ' . $attach_id);
+                }
             }
             
             $count++;
@@ -872,49 +894,53 @@ class GPD_Importer {
         if (!empty($photo_refs)) {
             update_post_meta($post_id, '_gpd_photo_references', $photo_refs);
         }
-        
-        // Update featured image reference
-        if ($featured_image_id) {
-            update_post_meta($post_id, '_gpd_featured_photo_id', $featured_image_id);
-        }
     }
-    
-    /**
+      /**
      * Import a single photo from the Places API
      */
     private function import_photo($photo_reference, $post_id, $business_name, $photo_number) {
         if (empty($photo_reference) || empty($this->api_key)) {
+            error_log('Missing photo reference or API key for business ' . $post_id);
             return false;
         }
         
-        // Build the photo URL using the new Places API v1 format
+        // Ensure business name is valid for filename
+        $business_name = !empty($business_name) ? sanitize_title($business_name) : 'business';
+        
+        // Build the photo URL using the Places API v1 format
         $url = "{$this->details_endpoint}{$photo_reference}/media";
         
         // Set up headers for the photo request
         $headers = [
-            'X-Goog-Api-Key' => $this->api_key
+            'X-Goog-Api-Key' => $this->api_key,
+            'Accept' => 'image/*'  // Ensure we get an image back
         ];
+        
+        error_log('Downloading photo ' . $photo_number . ' for business ' . $post_id . ' using reference: ' . $photo_reference);
         
         // Make the request to get the photo
         $response = wp_remote_get($url, [
             'headers' => $headers,
-            'timeout' => 30
+            'timeout' => 30,
+            'sslverify' => true
         ]);
         
         // Check for errors
-        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-            if (is_wp_error($response)) {
-                error_log('Failed to download Places photo: ' . $response->get_error_message());
-            } else {
-                error_log('Failed to download Places photo. HTTP Status: ' . wp_remote_retrieve_response_code($response));
-            }
+        if (is_wp_error($response)) {
+            error_log('Failed to download photo: ' . $response->get_error_message());
+            return false;
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            error_log('Failed to download photo. HTTP Status: ' . $status_code);
             return false;
         }
         
         // Get the image data
         $image_data = wp_remote_retrieve_body($response);
-        if (empty($image_data)) {
-            error_log('Empty image data received from Places API');
+        if (empty($image_data) || strlen($image_data) < 100) { // Basic check for valid image data
+            error_log('Empty or invalid image data received');
             return false;
         }
         
@@ -922,15 +948,15 @@ class GPD_Importer {
         $content_type = wp_remote_retrieve_header($response, 'content-type');
         $ext = $this->get_file_extension_from_content_type($content_type);
         
-        // Generate a unique filename
+        // Generate a unique filename with sanitized business name
         $filename = sanitize_file_name($business_name . '-photo-' . $photo_number . $ext);
-        
-        // Get WP upload directory
-        $upload = wp_upload_dir();
         
         // Create temp file
         $temp_file = wp_tempnam($filename);
-        file_put_contents($temp_file, $image_data);
+        if (!$temp_file || !file_put_contents($temp_file, $image_data)) {
+            error_log('Failed to create or write to temp file');
+            return false;
+        }
         
         // Prepare file array for wp_handle_sideload
         $file = [
@@ -941,9 +967,6 @@ class GPD_Importer {
             'size' => filesize($temp_file)
         ];
         
-        // Disable upload size checks - we trust the Google API
-        add_filter('upload_size_limit', [$this, 'remove_upload_size_limit']);
-        
         // Handle the upload
         $overrides = [
             'test_form' => false,
@@ -953,12 +976,17 @@ class GPD_Importer {
         // Move the file to uploads directory
         $file_data = wp_handle_sideload($file, $overrides);
         
-        // Remove the upload size limit filter
-        remove_filter('upload_size_limit', [$this, 'remove_upload_size_limit']);
-        
-        if (!empty($file_data['error'])) {
+        // Check for errors in sideloading
+        if (isset($file_data['error'])) {
+            error_log('Failed to handle photo sideload: ' . $file_data['error']);
             @unlink($temp_file);
-            error_log('Failed to handle photo upload: ' . $file_data['error']);
+            return false;
+        }
+        
+        // Make sure required file data exists
+        if (empty($file_data['file']) || empty($file_data['type'])) {
+            error_log('Invalid file data after sideload');
+            @unlink($temp_file);
             return false;
         }
         
@@ -971,28 +999,42 @@ class GPD_Importer {
             'post_parent' => $post_id
         ];
         
+        // Include image functions if needed
+        if (!function_exists('wp_generate_attachment_metadata')) {
+            require_once(ABSPATH . 'wp-admin/includes/image.php');
+            require_once(ABSPATH . 'wp-admin/includes/media.php');
+            require_once(ABSPATH . 'wp-admin/includes/file.php');
+        }
+        
         // Insert attachment
         $attach_id = wp_insert_attachment($attachment, $file_data['file'], $post_id);
         
-        if (!is_wp_error($attach_id)) {
-            // Generate attachment metadata
-            require_once(ABSPATH . 'wp-admin/includes/image.php');
-            $attach_data = wp_generate_attachment_metadata($attach_id, $file_data['file']);
-            wp_update_attachment_metadata($attach_id, $attach_data);
-            
-            // Store the photo reference as attachment meta
-            update_post_meta($attach_id, '_gpd_photo_reference', $photo_reference);
-            update_post_meta($attach_id, '_gpd_photo_attribution', 'Google Places API');
-            
+        if (is_wp_error($attach_id)) {
+            error_log('Failed to insert attachment: ' . $attach_id->get_error_message());
             @unlink($temp_file);
-            
-            return $attach_id;
+            return false;
         }
         
-        // Clean up on error
+        if (!$attach_id || $attach_id == 0) {
+            error_log('Zero or invalid attachment ID returned by wp_insert_attachment');
+            @unlink($temp_file);
+            return false;
+        }
+        
+        // Generate attachment metadata
+        $attach_data = wp_generate_attachment_metadata($attach_id, $file_data['file']);
+        wp_update_attachment_metadata($attach_id, $attach_data);
+        
+        // Store the photo reference as attachment meta
+        update_post_meta($attach_id, '_gpd_photo_reference', $photo_reference);
+        update_post_meta($attach_id, '_gpd_photo_attribution', 'Google Places API');
+        
+        // Clean up temp file
         @unlink($temp_file);
-        error_log('Failed to insert attachment: ' . $attach_id->get_error_message());
-        return false;
+        
+        error_log('Successfully created attachment ID ' . $attach_id . ' for business ' . $post_id . ' photo ' . $photo_number);
+        
+        return $attach_id;
     }
     
     /**
@@ -1083,5 +1125,135 @@ class GPD_Importer {
         }
         
         return $sanitized;
+    }
+
+    /**
+     * Process a batch of photos for a business
+     * 
+     * @param array $photos_data Array of photo data from the Places API
+     * @param int $post_id The post ID of the business
+     * @param string $business_name Name of the business
+     * @param int $photo_limit Maximum number of photos to process
+     * @return array Results of the photo processing
+     */
+    private function process_photos_batch($photos_data, $post_id, $business_name, $photo_limit) {
+        if (empty($photos_data) || empty($post_id) || $photo_limit <= 0) {
+            return [
+                'success' => false,
+                'photos_processed' => 0,
+                'message' => 'Invalid input data'
+            ];
+        }
+        
+        $featured_image_id = 0;
+        $photo_refs = [];
+        $photos_added = 0;
+        $results = [];
+        
+        // Process photos up to the limit
+        $photos = array_slice($photos_data, 0, $photo_limit);
+        
+        foreach ($photos as $index => $photo_data) {
+            if (!isset($photo_data['name'])) {
+                $results[] = [
+                    'status' => 'error',
+                    'message' => 'No photo name/reference found',
+                    'photo_data' => $photo_data
+                ];
+                continue;
+            }
+            
+            $photo_refs[] = $photo_data['name'];
+            $photo_ref = $photo_data['name'];
+            
+            // Check if photo already exists
+            $existing_photo = get_posts([
+                'post_type' => 'attachment',
+                'posts_per_page' => 1,
+                'meta_key' => '_gpd_photo_reference',
+                'meta_value' => $photo_ref,
+                'fields' => 'ids'
+            ]);
+            
+            $attach_id = 0;
+            if (!empty($existing_photo)) {
+                $attach_id = $existing_photo[0];
+                $results[] = [
+                    'status' => 'success',
+                    'message' => 'Using existing photo',
+                    'attachment_id' => $attach_id,
+                    'photo_reference' => $photo_ref
+                ];
+            } else {
+                $attach_id = $this->import_photo($photo_ref, $post_id, $business_name, $index + 1);
+                
+                if ($attach_id) {
+                    $photos_added++;
+                    $results[] = [
+                        'status' => 'success',
+                        'message' => 'Imported new photo',
+                        'attachment_id' => $attach_id,
+                        'photo_reference' => $photo_ref
+                    ];
+                } else {
+                    $results[] = [
+                        'status' => 'error',
+                        'message' => 'Failed to download or attach photo',
+                        'photo_reference' => $photo_ref
+                    ];
+                }
+            }
+            
+        // Set first photo as featured image
+            if ($attach_id && $index === 0) {
+                // First try the WordPress function
+                $result = set_post_thumbnail($post_id, $attach_id);
+                
+                // If that fails, try direct database update
+                if (!$result) {
+                    global $wpdb;
+                    update_post_meta($post_id, '_thumbnail_id', $attach_id);
+                    error_log('Used direct update for featured image on post ' . $post_id . ' with attachment ' . $attach_id);
+                }
+                
+                // Store the featured image ID
+                $featured_image_id = $attach_id;
+                
+                // Check if it was actually set
+                $check_id = get_post_thumbnail_id($post_id);
+                if (!$check_id) {
+                    error_log('Failed to set featured image for post ' . $post_id . ' with attachment ' . $attach_id);
+                } else {
+                    error_log('Successfully set featured image for post ' . $post_id . ' with attachment ' . $attach_id);
+                }
+            }
+        }
+        
+        // Save photo references to post meta
+        if (!empty($photo_refs)) {
+            update_post_meta($post_id, '_gpd_photo_references', $photo_refs);
+        }
+        
+        // Save featured image reference
+        if ($featured_image_id) {
+            // Store our own reference in case we need it later
+            update_post_meta($post_id, '_gpd_featured_photo_id', $featured_image_id);
+            
+            // Double check the thumbnail was set
+            $current_thumbnail_id = get_post_thumbnail_id($post_id);
+            if (!$current_thumbnail_id) {
+                // Try one more time directly
+                update_post_meta($post_id, '_thumbnail_id', $featured_image_id);
+            }
+        }
+        
+        return [
+            'success' => true,
+            'photos_processed' => count($photos),
+            'photos_added' => $photos_added,
+            'photo_references' => $photo_refs,
+            'featured_image_id' => $featured_image_id,
+            'results' => $results
+        ];
     }
 }

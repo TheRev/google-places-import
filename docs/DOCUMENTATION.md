@@ -195,3 +195,64 @@ A: Yes, the plugin creates standard WordPress custom post types which are compat
 
 **Q: How can I show businesses on a map?**
 A: Use the `[gpd_map]` shortcode to display businesses on an interactive map.
+
+## Image Tools
+
+The Image Tools section provides features to manage and fix business photos:
+
+### Featured Image Fixer
+This tool helps recover missing featured images for businesses:
+- Automatically scans for businesses without featured images daily
+- Multiple fallback mechanisms to find the correct image:
+  1. Checks stored featured image ID
+  2. Looks for attached photos
+  3. Uses photo references from Google Places
+- Batch processing capability for fixing multiple businesses
+- Real-time progress tracking
+- Automatic verification after fixing
+
+Access the Image Tools at **Businesses > Image Tools** in the WordPress admin menu.
+
+### Usage
+1. Go to **Businesses > Image Tools**
+2. Click "Fix Featured Images" to start the process
+3. The tool will scan for businesses without featured images
+4. Progress is shown in real-time
+5. Results are logged for troubleshooting
+
+### Automatic Daily Check
+The plugin automatically:
+- Checks for missing featured images once per day
+- Processes a small batch (10 businesses) to maintain performance
+- Only runs in the admin area to avoid front-end impact
+- Stores the last run date to prevent duplicate processing
+
+### Troubleshooting Image Tools
+
+Common issues and solutions:
+
+1. **Featured images not being fixed**
+   - Verify media attachments exist for the business
+   - Check WordPress media permissions
+   - Look for errors in WordPress debug log
+   - Make sure attachments are properly linked to businesses
+
+2. **Progress bar stuck**
+   - Try refreshing the page
+   - Check browser console for JavaScript errors
+   - Server timeout might be occurring for large batches
+
+3. **Daily automatic fix not running**
+   - Verify WordPress cron is working
+   - Check server error logs
+   - Make sure you're getting admin visits to trigger the check
+   - Try manually running the fix tool
+
+4. **Performance Issues**
+   - Reduce batch size using the `gpd_featured_image_fixer_batch_size` filter
+   - Schedule fixes during low-traffic periods
+   - Consider disabling automatic daily checks if needed
+
+### Related Hooks and Filters
+
+For developers, several hooks and filters are available to customize the Image Tools behavior. See the Developer Guide section for details.

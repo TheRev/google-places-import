@@ -499,8 +499,27 @@ public function ajax_refresh_photos() {
             );
             
             // Set the first photo as the featured image
-            if (count($photo_references) === 1) {
-                set_post_thumbnail($post_id, $attachment_id);
+            if (empty($photo_results) || count($photo_results) === 1) {
+                // First try the WordPress function
+                $result = set_post_thumbnail($post_id, $attachment_id);
+                
+                // If that fails, try direct database update
+                if (!$result) {
+                    global $wpdb;
+                    update_post_meta($post_id, '_thumbnail_id', $attachment_id);
+                    error_log('GPD Photo Manager: Used direct update for featured image on post ' . $post_id);
+                }
+                
+                // Store for our own reference
+                update_post_meta($post_id, '_gpd_featured_photo_id', $attachment_id);
+                
+                // Verify it was set
+                $check_id = get_post_thumbnail_id($post_id);
+                if (!$check_id) {
+                    error_log('GPD Photo Manager: Failed to set featured image for post ' . $post_id);
+                } else {
+                    error_log('GPD Photo Manager: Successfully set featured image: ' . $check_id);
+                }
             }
         } else {
             $photo_results[] = array(
@@ -1229,6 +1248,13 @@ private function download_and_attach_photo($photo_url, $post_id, $photo_referenc
         error_log('Google Places Directory: Failed to create attachment - ' . $attachment_id->get_error_message());
         return false;
     }
+    
+    // Store the photo reference as custom meta
+    update_post_meta($attachment_id, '_gpd_photo_reference', $photo_reference);
+    update_post_meta($attachment_id, '_gpd_photo_source', 'google_places_api');
+    
+    // Log success
+    error_log('Google Places Directory: Successfully attached photo ' . $attachment_id . ' to business ' . $post_id);
     
     // Store photo reference as attachment meta
     update_post_meta($attachment_id, '_gpd_photo_reference', $photo_reference);
