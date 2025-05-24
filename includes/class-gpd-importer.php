@@ -207,23 +207,32 @@ class GPD_Importer {
         ], HOUR_IN_SECONDS );
 
         return $processed_places;
-    }
-
-    /**
+    }    /**
      * Normalize place data from the new API format to match the expected format in the rest of the plugin
      * 
      * @param array $place Place data from API
      * @return array Normalized place data
+     * @throws Exception When the place data is incomplete or malformed
      */
     private function normalize_place_data($place) {
+        // Validate required fields are present
+        if (empty($place['id'])) {
+            $this->log_error(self::ERROR_INVALID_RESPONSE, 'Missing place ID in API response');
+            throw new Exception('Invalid place data: Missing place ID');
+        }
+        
+        // Build normalized array with extensive validation
         $normalized = [
-            'place_id' => $place['id'] ?? '',
-            'name' => isset($place['displayName']) ? $place['displayName']['text'] : '',
-            'formatted_address' => $place['formattedAddress'] ?? '',
-            'types' => $place['types'] ?? [],
-            'rating' => $place['rating'] ?? 0,
-            'business_status' => $place['businessStatus'] ?? '',
-            'url' => $place['googleMapsUri'] ?? '',
+            'place_id' => sanitize_text_field($place['id'] ?? ''),
+            'name' => isset($place['displayName']['text']) ? sanitize_text_field($place['displayName']['text']) : '',
+            'formatted_address' => sanitize_textarea_field($place['formattedAddress'] ?? ''),
+            'types' => $this->sanitize_place_types($place['types'] ?? []),
+            'rating' => $this->validate_rating($place['rating'] ?? 0),
+            'business_status' => sanitize_text_field($place['businessStatus'] ?? 'OPERATIONAL'),
+            'url' => esc_url_raw($place['googleMapsUri'] ?? ''),
+            'website' => isset($place['websiteUri']) ? esc_url_raw($place['websiteUri']) : '',
+            'phone_number' => isset($place['internationalPhoneNumber']) ? sanitize_text_field($place['internationalPhoneNumber']) : '',
+            'api_version' => 'v1', // Mark as imported with Places API v1
         ];
         
         // Handle address components 
@@ -235,10 +244,25 @@ class GPD_Importer {
         if (isset($place['location'])) {
             $normalized['geometry'] = [
                 'location' => [
-                    'lat' => $place['location']['latitude'] ?? 0,
-                    'lng' => $place['location']['longitude'] ?? 0
+                    'lat' => $this->validate_coordinate($place['location']['latitude'] ?? 0),
+                    'lng' => $this->validate_coordinate($place['location']['longitude'] ?? 0)
                 ]
             ];
+        } else {
+            // Set default coordinates if not present
+            $normalized['geometry'] = [
+                'location' => [
+                    'lat' => 0,
+                    'lng' => 0
+                ]
+            ];
+            
+            // Log a warning about missing coordinates
+            $this->log_error('missing_coordinates', sprintf(
+                'Missing coordinates for place %s (%s)',
+                $normalized['place_id'],
+                $normalized['name']
+            ));
         }
         
         return $normalized;
@@ -994,5 +1018,70 @@ class GPD_Importer {
      */
     public function remove_upload_size_limit() {
         return PHP_INT_MAX;
+    }
+
+    /**
+     * Validate rating value
+     *
+     * @param mixed $rating Rating value from API
+     * @return float Validated rating between 0 and 5
+     */
+    private function validate_rating($rating) {
+        $rating = floatval($rating);
+        
+        // Ensure rating is between 0 and 5
+        if ($rating < 0) {
+            return 0;
+        }
+        
+        if ($rating > 5) {
+            return 5;
+        }
+        
+        return round($rating, 1);
+    }
+    
+    /**
+     * Validate a coordinate value
+     *
+     * @param mixed $coordinate Latitude or longitude value
+     * @return float Validated coordinate
+     */
+    private function validate_coordinate($coordinate) {
+        $coordinate = floatval($coordinate);
+        
+        // Basic validation to ensure coordinates are within possible Earth values
+        // Latitude: -90 to 90, Longitude: -180 to 180
+        if ($coordinate < -180) {
+            return -180;
+        }
+        
+        if ($coordinate > 180) {
+            return 180;
+        }
+        
+        return $coordinate;
+    }
+    
+    /**
+     * Sanitize place types array
+     *
+     * @param array $types Array of place types from API
+     * @return array Sanitized array of place types
+     */
+    private function sanitize_place_types($types) {
+        if (!is_array($types)) {
+            return [];
+        }
+        
+        $sanitized = [];
+        
+        foreach ($types as $type) {
+            if (is_string($type)) {
+                $sanitized[] = sanitize_text_field($type);
+            }
+        }
+        
+        return $sanitized;
     }
 }

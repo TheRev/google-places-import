@@ -167,12 +167,12 @@ class GPD_Settings {
             </div>
         </div>
         <?php
-    }
-
-    public function save_settings() {
+    }    public function save_settings() {
         if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_settings_action', 'gpd_save_settings_nonce' ) ) {
             wp_die( __( 'Permission denied', 'google-places-directory' ) );
-        }        if ( isset( $_POST['gpd_api_key'] ) ) {
+        }
+        
+        if ( isset( $_POST['gpd_api_key'] ) ) {
             update_option( 'gpd_api_key', sanitize_text_field( wp_unslash( $_POST['gpd_api_key'] ) ) );
         }
 

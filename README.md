@@ -1,6 +1,11 @@
-# Google Places Import
+# Google Places Directory
 
-**Google Places Import** is a WordPress plugin designed to help you search, review, and bulk import business listings from Google Places into your own custom post type. It is ideal for creating a directory of businesses (e.g., dive shops, restaurants, hotels) on your WordPress site, with taxonomy support for destinations and regions.
+[![WordPress Compatible](https://img.shields.io/badge/WordPress-5.5%2B-blue.svg)](https://wordpress.org/)
+[![PHP Version](https://img.shields.io/badge/PHP-7.2%2B-purple.svg)](https://www.php.net/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-2.6.0-orange.svg)](https://github.com/TheRev/google-places-import)
+
+**Google Places Directory** is a powerful WordPress plugin designed to help you search, review, and bulk import business listings from Google Places API v1 into your own custom post type. It is ideal for creating a directory of businesses (e.g., dive shops, restaurants, hotels) on your WordPress site, with taxonomy support for destinations and regions.
 
 ## Features
 
@@ -49,9 +54,33 @@
 - Taxonomies are registered with `'show_admin_column' => true` for easy management in the admin.
 - The plugin uses AJAX and REST API for bulk imports and search.
 
+## Documentation
+
+Full documentation is available in the `docs` folder:
+
+- [User Guide](docs/DOCUMENTATION.md): Complete user documentation
+- [Developer API](docs/developer.php): Documentation for developers extending the plugin
+- [Privacy Policy](docs/PRIVACY.md): Information about data handling and GDPR compliance
+
+## API Rate Limiting
+
+The plugin includes sophisticated rate limiting to prevent exceeding Google's API quotas:
+
+- **Daily quota monitoring**: Tracks daily API usage against your Google Places API quota
+- **Per-minute rate limiting**: Implements a rolling 60-second window for limiting request frequency
+- **Automatic request throttling**: Spreads requests over time to prevent hitting rate limits
+- **Admin monitoring tools**: Real-time API usage stats in the WordPress admin toolbar
+- **Smart caching**: Reduces API calls by caching results efficiently
+
 ## Contributing
 
 Pull requests and GitHub issues are welcome! Please open an issue for bugs or feature requests.
+
+1. Fork the repository
+2. Create your feature branch: `git checkout -b my-new-feature`
+3. Commit your changes: `git commit -am 'Add some feature'`
+4. Push to the branch: `git push origin my-new-feature`
+5. Submit a pull request
 
 ## License
 

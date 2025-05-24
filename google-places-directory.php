@@ -4,11 +4,24 @@
  * Description: Import businesses from Google Places API (New) into your WordPress site
  * Version: 2.6.0
  * Author: TheRev
+ * Author URI: https://github.com/TheRev
  * Text Domain: google-places-directory
  * Domain Path: /languages
+ * License: MIT
+ * Requires at least: 5.5
+ * Requires PHP: 7.2
+ * 
+ * Google Places Directory is a WordPress plugin designed to help you search,
+ * review, and bulk import business listings from Google Places into your own
+ * custom post type. It creates a directory of businesses (e.g., dive shops, 
+ * restaurants, hotels) with taxonomy support for destinations and regions.
  * 
  * Updated for Google Places API v1 in May 2025
  * Documentation reorganized and enhanced in May 2025
+ * 
+ * @package GooglePlacesDirectory
+ * @author TheRev
+ * @version 2.6.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
