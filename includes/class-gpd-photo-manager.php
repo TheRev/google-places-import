@@ -23,23 +23,20 @@ class GPD_Photo_Manager {
     }
 
     private function init_hooks() {
-        // Add admin menu for photo management after post type is registered
-        add_action('admin_menu', array($this, 'add_photo_management_page'), 20);
-        
-        // Add bulk action for refreshing photos
-        add_filter('bulk_actions-edit-business', array($this, 'add_bulk_actions'));
-        add_filter('handle_bulk_actions-edit-business', array($this, 'handle_bulk_actions'), 10, 3);
-        
-        // Add admin notices
-        add_action('admin_notices', array($this, 'display_admin_notices'));
-
-        // Add Ajax handlers
-        add_action('wp_ajax_gpd_refresh_business_photos', array($this, 'ajax_refresh_photos'));
-        add_action('wp_ajax_gpd_get_businesses_without_photos', array($this, 'ajax_get_businesses_without_photos'));
-
-        // Add handler for saving photo settings
-        add_action('admin_post_gpd_save_photo_settings', array($this, 'save_photo_settings'));
-    }
+    // Add admin menu for photo management
+    add_action( 'admin_menu', array( $this, 'add_photo_management_page' ) );
+    
+    // Add bulk action for refreshing photos
+    add_filter( 'bulk_actions-edit-business', array( $this, 'add_bulk_actions' ) );
+    add_filter( 'handle_bulk_actions-edit-business', array( $this, 'handle_bulk_actions' ), 10, 3 );
+    
+    // Add admin notices
+    add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
+    
+    // Add Ajax handlers
+    add_action( 'wp_ajax_gpd_refresh_business_photos', array( $this, 'ajax_refresh_photos' ) );
+    add_action( 'wp_ajax_gpd_get_businesses_without_photos', array( $this, 'ajax_get_businesses_without_photos' ) );
+}
 
     /**
      * Add the photo management page to the admin menu
@@ -499,27 +496,8 @@ public function ajax_refresh_photos() {
             );
             
             // Set the first photo as the featured image
-            if (empty($photo_results) || count($photo_results) === 1) {
-                // First try the WordPress function
-                $result = set_post_thumbnail($post_id, $attachment_id);
-                
-                // If that fails, try direct database update
-                if (!$result) {
-                    global $wpdb;
-                    update_post_meta($post_id, '_thumbnail_id', $attachment_id);
-                    error_log('GPD Photo Manager: Used direct update for featured image on post ' . $post_id);
-                }
-                
-                // Store for our own reference
-                update_post_meta($post_id, '_gpd_featured_photo_id', $attachment_id);
-                
-                // Verify it was set
-                $check_id = get_post_thumbnail_id($post_id);
-                if (!$check_id) {
-                    error_log('GPD Photo Manager: Failed to set featured image for post ' . $post_id);
-                } else {
-                    error_log('GPD Photo Manager: Successfully set featured image: ' . $check_id);
-                }
+            if (count($photo_references) === 1) {
+                set_post_thumbnail($post_id, $attachment_id);
             }
         } else {
             $photo_results[] = array(
@@ -578,12 +556,6 @@ public function ajax_refresh_photos() {
         $total_photos = $this->count_total_photos();
         $photo_limit = (int) get_option( 'gpd_photo_limit', 3 );
         
-        // Show settings updated message if needed
-        if ( isset( $_GET['settings-updated'] ) ) {
-            add_settings_error( 'gpd_messages', 'gpd_message', __( 'Photo settings saved.', 'google-places-directory' ), 'updated' );
-        }
-        
-        settings_errors( 'gpd_messages' );
         ?>
         <div class="wrap gpd-photo-management">
             <h1><?php esc_html_e( 'Photo Management', 'google-places-directory' ); ?></h1>
@@ -607,37 +579,6 @@ public function ajax_refresh_photos() {
                 <div class="gpd-stat-card">
                     <h2><?php echo number_format( $total_photos ); ?></h2>
                     <p><?php esc_html_e( 'Total Photos', 'google-places-directory' ); ?></p>
-                </div>
-            </div>
-            
-            <div class="gpd-photo-settings">
-                <div class="gpd-action-card">
-                    <h3><?php esc_html_e( 'Photo Import Settings', 'google-places-directory' ); ?></h3>
-                    
-                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-                        <?php wp_nonce_field( 'gpd_save_photo_settings_action', 'gpd_save_photo_settings_nonce' ); ?>
-                        <input type="hidden" name="action" value="gpd_save_photo_settings">
-                        
-                        <table class="form-table" role="presentation">
-                            <tr>
-                                <th scope="row"><label for="gpd_photo_limit"><?php esc_html_e( 'Photos to Import', 'google-places-directory' ); ?></label></th>
-                                <td>
-                                    <select name="gpd_photo_limit" id="gpd_photo_limit">
-                                        <option value="0" <?php selected( $photo_limit, 0 ); ?>><?php esc_html_e( 'None', 'google-places-directory' ); ?></option>
-                                        <option value="1" <?php selected( $photo_limit, 1 ); ?>><?php esc_html_e( '1 (Featured Image Only)', 'google-places-directory' ); ?></option>
-                                        <option value="3" <?php selected( $photo_limit, 3 ); ?>><?php esc_html_e( '3 (Default)', 'google-places-directory' ); ?></option>
-                                        <option value="5" <?php selected( $photo_limit, 5 ); ?>><?php esc_html_e( '5', 'google-places-directory' ); ?></option>
-                                        <option value="10" <?php selected( $photo_limit, 10 ); ?>><?php esc_html_e( '10 (Maximum)', 'google-places-directory' ); ?></option>
-                                    </select>
-                                    <p class="description">
-                                        <?php esc_html_e( 'Maximum number of photos to import per business. The first photo will be set as the featured image.', 'google-places-directory' ); ?>
-                                    </p>
-                                </td>
-                            </tr>
-                        </table>
-                        
-                        <?php submit_button( __( 'Save Changes', 'google-places-directory' ) ); ?>
-                    </form>
                 </div>
             </div>
             
@@ -759,14 +700,6 @@ public function ajax_refresh_photos() {
             margin-bottom: 30px;
         }
         
-        .gpd-photo-settings {
-            margin-bottom: 30px;
-        }
-        
-        .gpd-photo-settings .gpd-action-card {
-            max-width: 800px;
-        }
-        
         .gpd-stat-card {
             background: white;
             border: 1px solid #ccd0d4;
@@ -780,6 +713,13 @@ public function ajax_refresh_photos() {
             font-size: 32px;
             line-height: 1.2;
             color: #0073aa;
+        }
+        
+        .gpd-photo-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
         
         .gpd-action-card {
@@ -1095,21 +1035,20 @@ public function ajax_refresh_photos() {
      * @return int Number of photos
      */
     private function count_total_photos() {
-        global $wpdb;
+        $query = new WP_Query( array(
+            'post_type' => 'attachment',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'no_found_rows' => true,
+            'meta_query' => array(
+                array(
+                    'key' => '_gpd_photo_reference',
+                    'compare' => 'EXISTS',
+                ),
+            ),
+        ) );
         
-        // Get count of all valid photo attachments with references
-        $count = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(DISTINCT pm.post_id) 
-            FROM {$wpdb->postmeta} pm
-            JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-            WHERE pm.meta_key = %s 
-            AND p.post_type = 'attachment'
-            AND p.post_status = 'inherit'
-            AND pm.meta_value != ''",
-            '_gpd_photo_reference'
-        ));
-        
-        return (int) $count;
+        return $query->post_count;
     }
 
     /**
@@ -1249,13 +1188,6 @@ private function download_and_attach_photo($photo_url, $post_id, $photo_referenc
         return false;
     }
     
-    // Store the photo reference as custom meta
-    update_post_meta($attachment_id, '_gpd_photo_reference', $photo_reference);
-    update_post_meta($attachment_id, '_gpd_photo_source', 'google_places_api');
-    
-    // Log success
-    error_log('Google Places Directory: Successfully attached photo ' . $attachment_id . ' to business ' . $post_id);
-    
     // Store photo reference as attachment meta
     update_post_meta($attachment_id, '_gpd_photo_reference', $photo_reference);
     
@@ -1293,35 +1225,5 @@ private function download_and_attach_photo($photo_url, $post_id, $photo_referenc
         
         // Clear featured image
         delete_post_thumbnail( $post_id );
-    }
-
-    /**
-     * Save photo settings
-     */
-    public function save_photo_settings() {
-        if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_photo_settings_action', 'gpd_save_photo_settings_nonce' ) ) {
-            wp_die( __( 'Permission denied', 'google-places-directory' ) );
-        }
-
-        // Save photo limit setting
-        if ( isset( $_POST['gpd_photo_limit'] ) ) {
-            $photo_limit = intval( $_POST['gpd_photo_limit'] );
-            // Ensure it's within valid range (0-10)
-            $photo_limit = min( 10, max( 0, $photo_limit ) );
-            update_option( 'gpd_photo_limit', $photo_limit );
-        }
-
-        // Redirect back to the photo management page with success message
-        $redirect_url = add_query_arg(
-            array(
-                'post_type' => 'business',
-                'page' => 'gpd-photo-management',
-                'settings-updated' => 'true',
-            ),
-            admin_url( 'edit.php' )
-        );
-
-        wp_redirect( $redirect_url );
-        exit;
     }
 }
