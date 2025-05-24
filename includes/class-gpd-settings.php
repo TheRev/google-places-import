@@ -12,21 +12,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class GPD_Settings {
     private static $instance = null;
-    private $settings = array();
-    private $options_group = 'gpd_settings';
-    private $options_page = 'gpd-settings';
 
     public static function instance() {
         if ( self::$instance === null ) {
             self::$instance = new self();
+            self::$instance->init_hooks();
         }
         return self::$instance;
     }
 
-    public function __construct() {
+    private function init_hooks() {
         add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
-        add_action( 'admin_init', array( $this, 'init_settings' ) );
-        add_action( 'init', array( $this, 'init_labels' ) );
         add_action( 'admin_post_gpd_save_settings', array( $this, 'save_settings' ) );
     }
 
@@ -66,6 +62,22 @@ class GPD_Settings {
                             <p class="description">
                                 <?php esc_html_e( 'Enter your Google API key with Places API (New) enabled.', 'google-places-directory' ); ?>
                                 <a href="https://console.cloud.google.com/apis/library/places.googleapis.com" target="_blank"><?php esc_html_e( 'Enable API', 'google-places-directory' ); ?></a>
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- New setting for photo limit -->
+                    <tr>
+                        <th scope="row"><label for="gpd_photo_limit"><?php esc_html_e( 'Photos to Import', 'google-places-directory' ); ?></label></th>
+                        <td>
+                            <select name="gpd_photo_limit" id="gpd_photo_limit">
+                                <option value="0" <?php selected( $photo_limit, 0 ); ?>><?php esc_html_e( 'None', 'google-places-directory' ); ?></option>
+                                <option value="1" <?php selected( $photo_limit, 1 ); ?>><?php esc_html_e( '1 (Featured Image Only)', 'google-places-directory' ); ?></option>
+                                <option value="3" <?php selected( $photo_limit, 3 ); ?>><?php esc_html_e( '3 (Default)', 'google-places-directory' ); ?></option>
+                                <option value="5" <?php selected( $photo_limit, 5 ); ?>><?php esc_html_e( '5', 'google-places-directory' ); ?></option>
+                                <option value="10" <?php selected( $photo_limit, 10 ); ?>><?php esc_html_e( '10 (Maximum)', 'google-places-directory' ); ?></option>
+                            </select>
+                            <p class="description">
+                                <?php esc_html_e( 'Maximum number of photos to import per business. The first photo will be set as the featured image.', 'google-places-directory' ); ?>
                             </p>
                         </td>
                     </tr>
@@ -167,13 +179,23 @@ class GPD_Settings {
             </div>
         </div>
         <?php
-    }    public function save_settings() {
+    }
+
+    public function save_settings() {
         if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_settings_action', 'gpd_save_settings_nonce' ) ) {
             wp_die( __( 'Permission denied', 'google-places-directory' ) );
         }
-        
+
         if ( isset( $_POST['gpd_api_key'] ) ) {
             update_option( 'gpd_api_key', sanitize_text_field( wp_unslash( $_POST['gpd_api_key'] ) ) );
+        }
+
+        // Save photo limit setting
+        if ( isset( $_POST['gpd_photo_limit'] ) ) {
+            $photo_limit = intval( $_POST['gpd_photo_limit'] );
+            // Ensure it's within valid range (0-10)
+            $photo_limit = min( 10, max( 0, $photo_limit ) );
+            update_option( 'gpd_photo_limit', $photo_limit );
         }
 
         $redirect_url = add_query_arg(
@@ -187,63 +209,6 @@ class GPD_Settings {
 
         wp_redirect( $redirect_url );
         exit;
-    }
-
-    public function init_settings() {
-        register_setting( $this->options_group, 'gpd_api_key' );
-        register_setting( $this->options_group, 'gpd_photo_limit', array(
-            'type' => 'integer',
-            'default' => 3
-        ) );
-
-        add_settings_section(
-            'gpd_main_section',
-            __( 'Main Settings', 'google-places-directory' ),
-            null,
-            $this->options_page
-        );
-
-        add_settings_field(
-            'gpd_api_key',
-            __( 'Google Places API Key', 'google-places-directory' ),
-            array( $this, 'render_api_key_field' ),
-            $this->options_page,
-            'gpd_main_section'
-        );
-
-        add_settings_field(
-            'gpd_photo_limit',
-            __( 'Photo Import Limit', 'google-places-directory' ),
-            array( $this, 'render_photo_limit_field' ),
-            $this->options_page,
-            'gpd_main_section'
-        );
-    }
-
-    public function init_labels() {
-        $this->settings = array(
-            'gpd_api_key' => array(
-                'label' => __( 'Google Places API Key', 'google-places-directory' ),
-                'description' => __( 'Enter your Google Places API key', 'google-places-directory' )
-            ),
-            'gpd_photo_limit' => array(
-                'label' => __( 'Photo Import Limit', 'google-places-directory' ),
-                'description' => __( 'Maximum number of photos to import per business (0 = none)', 'google-places-directory' )
-            ),
-            // ...other settings...
-        );
-    }
-
-    public function render_api_key_field() {
-        $value = get_option( 'gpd_api_key', '' );
-        echo '<input type="text" name="gpd_api_key" value="' . esc_attr( $value ) . '" class="regular-text">';
-        echo '<p class="description">' . esc_html( $this->settings['gpd_api_key']['description'] ) . '</p>';
-    }
-
-    public function render_photo_limit_field() {
-        $value = get_option( 'gpd_photo_limit', 3 );
-        echo '<input type="number" name="gpd_photo_limit" value="' . esc_attr( $value ) . '" min="0" max="10">';
-        echo '<p class="description">' . esc_html( $this->settings['gpd_photo_limit']['description'] ) . '</p>';
     }
 }
 
