@@ -14,77 +14,55 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class GPD_CPT {
-    /**
-     * Post type arguments
-     * @var array
-     */
-    protected $post_type_args = [];
     public static function instance() {
         static $instance = null;
         if ( ! $instance ) {
             $instance = new self();
+            add_action( 'init', [ $instance, 'register_post_type_and_taxonomies' ], 0 );
+            add_action( 'init', [ $instance, 'register_custom_meta' ], 1 ); // Ensure CPT exists before registering meta for it
+            add_filter( 'content_save_pre', [ $instance, 'allow_html_for_business_cpt' ] );
+            add_action( 'restrict_manage_posts', [ $instance, 'add_taxonomy_filters' ] );
+            
+            // Add business data to admin columns
+            add_filter( 'manage_business_posts_columns', [ $instance, 'add_business_columns' ] );
+            add_action( 'manage_business_posts_custom_column', [ $instance, 'render_business_column' ], 10, 2 );
         }
         return $instance;
     }
-    
-    public function __construct() {
-        // Initialize labels before registering post types
-        $this->init_labels();
-        
-        // Register post types early in init
-        add_action('init', array($this, 'register_post_types_and_taxonomies'), 0);
-        
-        // Register meta fields after post type is registered
-        add_action('init', array($this, 'register_custom_meta'), 1);
-        
-        // Add hooks for HTML handling, taxonomy filters, and admin columns
-        add_filter('content_save_pre', array($this, 'allow_html_for_business_cpt'));
-        add_action('restrict_manage_posts', array($this, 'add_taxonomy_filters'));
-        add_filter('manage_business_posts_columns', array($this, 'add_business_columns'));
-        add_action('manage_business_posts_custom_column', array($this, 'render_business_column'), 10, 2);
-        
-        // REST API hooks
-        add_filter('rest_prepare_business', array($this, 'add_meta_to_rest_api'), 10, 3);
-        add_action('rest_api_init', array($this, 'register_meta_fields'));
-    }
 
-    public function init_labels() {
-        // Initialize labels at init hook to ensure translations are available
-        $this->post_type_args = array(
-            'labels' => array(
-                'name'               => __('Businesses', 'google-places-directory'),
-                'singular_name'      => __('Business', 'google-places-directory'),
-                'menu_name'          => __('Businesses', 'google-places-directory'),
-                'name_admin_bar'     => __('Business', 'google-places-directory'),
-                'add_new'           => __('Add New', 'google-places-directory'),
-                'add_new_item'      => __('Add New Business', 'google-places-directory'),
-                'new_item'          => __('New Business', 'google-places-directory'),
-                'edit_item'         => __('Edit Business', 'google-places-directory'),
-                'view_item'         => __('View Business', 'google-places-directory'),
-                'all_items'         => __('All Businesses', 'google-places-directory'),
-                'search_items'      => __('Search Businesses', 'google-places-directory'),
-                'not_found'         => __('No businesses found.', 'google-places-directory'),
-                'not_found_in_trash'=> __('No businesses found in Trash.', 'google-places-directory')
-            ),
-            'public'       => true,
-            'has_archive'  => true,
-            'show_in_rest' => true,
-            'rest_base'    => 'businesses',
-            'menu_icon'    => 'dashicons-store',
-            'supports'     => array('title', 'editor', 'thumbnail', 'excerpt', 'custom-fields'),
-            'rewrite'      => array('slug' => 'business')
-        );
-    }
+    public function register_post_type_and_taxonomies() {
+        // --- Business CPT ---
+        $labels = [
+            'name'               => __( 'Businesses', 'google-places-directory' ),
+            'singular_name'      => __( 'Business',   'google-places-directory' ),
+            'menu_name'          => __( 'Businesses', 'google-places-directory' ),
+            'name_admin_bar'     => __( 'Business',   'google-places-directory' ),
+            'add_new'            => __( 'Add New', 'google-places-directory' ),
+            'add_new_item'       => __( 'Add New Business', 'google-places-directory' ),
+            'edit_item'          => __( 'Edit Business', 'google-places-directory' ),
+            'new_item'           => __( 'New Business', 'google-places-directory' ),
+            'view_item'          => __( 'View Business', 'google-places-directory' ),
+            'search_items'       => __( 'Search Businesses', 'google-places-directory' ),
+            'not_found'          => __( 'No businesses found', 'google-places-directory' ),
+            'not_found_in_trash' => __( 'No businesses found in trash', 'google-places-directory' ),
+        ];
 
-    public function register_post_types_and_taxonomies() {
-        // Register the post type
-        register_post_type('business', $this->post_type_args);
+        $args = [
+            'labels'             => $labels,
+            'public'             => true,
+            'show_ui'            => true,
+            'show_in_menu'       => true,
+            'menu_icon'          => 'dashicons-store',
+            'supports'           => [ 'title', 'editor', 'custom-fields', 'thumbnail' ],
+            'taxonomies'         => [ 'region', 'destination' ],
+            'has_archive'        => false,
+            'rewrite'            => [ 'slug' => 'business' ],
+            'show_in_rest'       => true, // Make CPT available in REST API
+            'capability_type'    => 'post',
+            'menu_position'      => 5,
+        ];
+        register_post_type( 'business', $args );
 
-        // Register taxonomies
-        $this->register_taxonomies();
-    }
-
-    public function register_taxonomies() {
         // --- Destinations taxonomy ---
         register_taxonomy( 'destination', 'business', [
             'labels'            => [
@@ -331,79 +309,12 @@ class GPD_CPT {
 
     /**
      * Sanitize callback for an array of strings
-     */    public function sanitize_array_of_strings($value) {
+     */
+    public function sanitize_array_of_strings($value) {
         if (!is_array($value)) {
             return [];
         }
         return array_map('sanitize_text_field', $value);
-    }
-    
-    /**
-     * Add meta fields to REST API response
-     *
-     * @param WP_REST_Response $response Current response object
-     * @param WP_Post $post Current post object
-     * @param WP_REST_Request $request Current request object
-     * @return WP_REST_Response
-     */
-    public function add_meta_to_rest_api($response, $post, $request) {
-        // Add meta fields to API response
-        $meta_fields = [
-            '_gpd_place_id',
-            '_gpd_display_name',
-            '_gpd_address',
-            '_gpd_locality',
-            '_gpd_latitude',
-            '_gpd_longitude',
-            '_gpd_types',
-            '_gpd_rating',
-            '_gpd_business_status',
-            '_gpd_maps_uri',
-            '_gpd_website',
-            '_gpd_phone_number',
-            '_gpd_api_version'
-        ];
-        
-        foreach ($meta_fields as $field) {
-            $response->data[$field] = get_post_meta($post->ID, $field, true);
-        }
-        
-        return $response;
-    }
-      /**
-     * Register meta fields for REST API
-     */
-    public function register_meta_fields() {
-        // Register meta fields specifically for REST API
-        register_rest_field('business', 'business_meta', [
-            'get_callback' => function($post) {
-                $meta_fields = [
-                    '_gpd_place_id',
-                    '_gpd_display_name',
-                    '_gpd_address',
-                    '_gpd_locality',
-                    '_gpd_latitude',
-                    '_gpd_longitude',
-                    '_gpd_types',
-                    '_gpd_rating',
-                    '_gpd_business_status',
-                    '_gpd_maps_uri',
-                    '_gpd_website',
-                    '_gpd_phone_number'
-                ];
-                
-                $meta = [];
-                foreach ($meta_fields as $field) {
-                    $meta[str_replace('_gpd_', '', $field)] = get_post_meta($post['id'], $field, true);
-                }
-                
-                return $meta;
-            },
-            'schema' => [
-                'description' => __('Business meta data from Google Places', 'google-places-directory'),
-                'type' => 'object'
-            ]
-        ]);
     }
 }
 
