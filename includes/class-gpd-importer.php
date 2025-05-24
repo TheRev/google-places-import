@@ -17,25 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 class GPD_Importer {
     private static $instance = null;
     private $api_key;
-    private $error_log = [];
-    private $batch_progress = [];
     
     // API endpoints
     private $text_endpoint    = 'https://places.googleapis.com/v1/places:searchText';
     private $details_endpoint = 'https://places.googleapis.com/v1/places/';
-
-    // Batch settings
-    const BATCH_SIZE = 5; // Maximum places to process per batch
-    const RETRY_DELAY = 2; // Seconds to wait between retries
-    const MAX_RETRIES = 3; // Maximum number of retries per request
-
-    // Error codes
-    const ERROR_API_KEY_MISSING = 'api_key_missing';
-    const ERROR_API_REQUEST_FAILED = 'api_request_failed';
-    const ERROR_INVALID_RESPONSE = 'invalid_response';
-    const ERROR_RATE_LIMIT = 'rate_limit';
-    const ERROR_PERMISSION_DENIED = 'permission_denied';
-    const ERROR_INVALID_REQUEST = 'invalid_request';
 
     public static function instance() {
         if ( self::$instance === null ) {
@@ -43,88 +28,6 @@ class GPD_Importer {
             self::$instance->api_key = get_option( 'gpd_api_key' );
         }
         return self::$instance;
-    }
-
-    /**
-     * Log an error for the current import process
-     */
-    private function log_error($code, $message, $context = []) {
-        $this->error_log[] = [
-            'code' => $code,
-            'message' => $message,
-            'context' => $context,
-            'timestamp' => current_time('mysql')
-        ];
-        
-        error_log(sprintf(
-            '[Google Places Directory] Error %s: %s. Context: %s',
-            $code,
-            $message,
-            wp_json_encode($context)
-        ));
-    }
-
-    /**
-     * Get all errors logged during the current import process
-     */
-    public function get_import_errors() {
-        return $this->error_log;
-    }
-
-    /**
-     * Handle API response and standardize error handling
-     */
-    private function handle_api_response($response, $endpoint) {
-        if (is_wp_error($response)) {
-            $this->log_error(
-                self::ERROR_API_REQUEST_FAILED,
-                $response->get_error_message(),
-                ['endpoint' => $endpoint]
-            );
-            return new WP_Error(self::ERROR_API_REQUEST_FAILED, $response->get_error_message());
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-
-        if ($response_code !== 200) {
-            $error_message = isset($body['error']['message']) ? $body['error']['message'] : "API Error: HTTP {$response_code}";
-            $error_code = self::ERROR_API_REQUEST_FAILED;
-
-            // Map specific API error codes
-            if (isset($body['error']['status'])) {
-                switch ($body['error']['status']) {
-                    case 'PERMISSION_DENIED':
-                        $error_code = self::ERROR_PERMISSION_DENIED;
-                        break;
-                    case 'RESOURCE_EXHAUSTED':
-                        $error_code = self::ERROR_RATE_LIMIT;
-                        break;
-                    case 'INVALID_ARGUMENT':
-                        $error_code = self::ERROR_INVALID_REQUEST;
-                        break;
-                }
-            }
-
-            $this->log_error($error_code, $error_message, [
-                'endpoint' => $endpoint,
-                'response_code' => $response_code,
-                'api_error' => $body['error'] ?? null
-            ]);
-
-            return new WP_Error($error_code, $error_message);
-        }
-
-        if (!is_array($body)) {
-            $this->log_error(
-                self::ERROR_INVALID_RESPONSE,
-                'Invalid API response format',
-                ['endpoint' => $endpoint]
-            );
-            return new WP_Error(self::ERROR_INVALID_RESPONSE, 'Invalid API response format');
-        }
-
-        return $body;
     }
 
     /**
@@ -181,14 +84,22 @@ class GPD_Importer {
             ]
         );
 
-        $response = $this->handle_api_response($response, 'Text Search');
-
-        if (is_wp_error($response)) {
-            return $response;
+        if ( is_wp_error( $response ) ) {
+            return new WP_Error( 'api_error', $response->get_error_message() );
         }
 
-        $body = $response;
-        
+        $response_code = wp_remote_retrieve_response_code( $response );
+        if ( $response_code !== 200 ) {
+            $body = json_decode( wp_remote_retrieve_body( $response ), true );
+            $error_message = isset($body['error']['message']) ? $body['error']['message'] : "API Error: HTTP {$response_code}";
+            return new WP_Error( 'api_http_error', $error_message );
+        }
+
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( ! is_array( $body ) ) {
+            return new WP_Error( 'api_parse_error', 'Invalid Places API response.' );
+        }
+
         // Extract results and next token
         $places = !empty( $body['places'] ) ? $body['places'] : [];
         $next_page_token = $body['nextPageToken'] ?? '';
@@ -207,32 +118,23 @@ class GPD_Importer {
         ], HOUR_IN_SECONDS );
 
         return $processed_places;
-    }    /**
+    }
+
+    /**
      * Normalize place data from the new API format to match the expected format in the rest of the plugin
      * 
      * @param array $place Place data from API
      * @return array Normalized place data
-     * @throws Exception When the place data is incomplete or malformed
      */
     private function normalize_place_data($place) {
-        // Validate required fields are present
-        if (empty($place['id'])) {
-            $this->log_error(self::ERROR_INVALID_RESPONSE, 'Missing place ID in API response');
-            throw new Exception('Invalid place data: Missing place ID');
-        }
-        
-        // Build normalized array with extensive validation
         $normalized = [
-            'place_id' => sanitize_text_field($place['id'] ?? ''),
-            'name' => isset($place['displayName']['text']) ? sanitize_text_field($place['displayName']['text']) : '',
-            'formatted_address' => sanitize_textarea_field($place['formattedAddress'] ?? ''),
-            'types' => $this->sanitize_place_types($place['types'] ?? []),
-            'rating' => $this->validate_rating($place['rating'] ?? 0),
-            'business_status' => sanitize_text_field($place['businessStatus'] ?? 'OPERATIONAL'),
-            'url' => esc_url_raw($place['googleMapsUri'] ?? ''),
-            'website' => isset($place['websiteUri']) ? esc_url_raw($place['websiteUri']) : '',
-            'phone_number' => isset($place['internationalPhoneNumber']) ? sanitize_text_field($place['internationalPhoneNumber']) : '',
-            'api_version' => 'v1', // Mark as imported with Places API v1
+            'place_id' => $place['id'] ?? '',
+            'name' => isset($place['displayName']) ? $place['displayName']['text'] : '',
+            'formatted_address' => $place['formattedAddress'] ?? '',
+            'types' => $place['types'] ?? [],
+            'rating' => $place['rating'] ?? 0,
+            'business_status' => $place['businessStatus'] ?? '',
+            'url' => $place['googleMapsUri'] ?? '',
         ];
         
         // Handle address components 
@@ -244,25 +146,10 @@ class GPD_Importer {
         if (isset($place['location'])) {
             $normalized['geometry'] = [
                 'location' => [
-                    'lat' => $this->validate_coordinate($place['location']['latitude'] ?? 0),
-                    'lng' => $this->validate_coordinate($place['location']['longitude'] ?? 0)
+                    'lat' => $place['location']['latitude'] ?? 0,
+                    'lng' => $place['location']['longitude'] ?? 0
                 ]
             ];
-        } else {
-            // Set default coordinates if not present
-            $normalized['geometry'] = [
-                'location' => [
-                    'lat' => 0,
-                    'lng' => 0
-                ]
-            ];
-            
-            // Log a warning about missing coordinates
-            $this->log_error('missing_coordinates', sprintf(
-                'Missing coordinates for place %s (%s)',
-                $normalized['place_id'],
-                $normalized['name']
-            ));
         }
         
         return $normalized;
@@ -286,13 +173,20 @@ class GPD_Importer {
             'timeout' => 30 // Longer timeout for potentially slower responses
         ]);
 
-        $response = $this->handle_api_response($response, 'Place Details');
-
-        if (is_wp_error($response)) {
+        if ( is_wp_error( $response ) ) {
             return false;
         }
         
-        $body = $response;
+        $response_code = wp_remote_retrieve_response_code( $response );
+        if ( $response_code !== 200 ) {
+            // Log error if needed
+            return false;
+        }
+
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if (!is_array($body)) {
+            return false;
+        }
 
         // Transform the response to match the expected structure in the process_import method
         return $this->normalize_details_data($body);
@@ -346,6 +240,132 @@ class GPD_Importer {
             ];
         }
         return $normalized;
+    }
+
+    /**
+     * Import a photo from Google Places API to WordPress Media Library
+     *
+     * @param string $photo_reference Photo reference from Places API
+     * @param int    $post_id         Post ID to attach the photo to
+     * @param string $business_name   Business name for the photo title
+     * @param int    $photo_index     Index number for the photo (to create unique filenames)
+     * @return int|false              Attachment ID if successful, false otherwise
+     */
+    private function import_photo($photo_reference, $post_id, $business_name, $photo_index = 1) {
+        if (empty($photo_reference) || empty($post_id)) {
+            return false;
+        }
+
+        // Build the photo URL with the reference path
+        $url = "https://places.googleapis.com/v1/{$photo_reference}/media";
+        
+        // Add size parameters - adjust these values based on your needs
+        $params = [
+            'maxHeightPx' => 800,  // Standard height for featured images
+            'maxWidthPx'  => 1200, // Standard width for featured images
+        ];
+        
+        $url = add_query_arg($params, $url);
+        
+        // Set up headers for the request
+        $headers = [
+            'X-Goog-Api-Key' => $this->api_key,
+        ];
+        
+        // Make the request to get the photo
+        $response = wp_remote_get($url, [
+            'headers' => $headers,
+            'timeout' => 30
+        ]);
+        
+        // Check for errors
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            if (is_wp_error($response)) {
+                error_log('Failed to download Places photo: ' . $response->get_error_message());
+            } else {
+                error_log('Failed to download Places photo. HTTP Status: ' . wp_remote_retrieve_response_code($response));
+            }
+            return false;
+        }
+        
+        // Get the image data
+        $image_data = wp_remote_retrieve_body($response);
+        if (empty($image_data)) {
+            error_log('Empty image data received from Places API');
+            return false;
+        }
+        
+        // Get the content type to determine file extension
+        $content_type = wp_remote_retrieve_header($response, 'content-type');
+        
+        // Determine file extension based on content type
+        $extension = '';
+        switch ($content_type) {
+            case 'image/jpeg':
+                $extension = 'jpg';
+                break;
+            case 'image/png':
+                $extension = 'png';
+                break;
+            case 'image/webp':
+                $extension = 'webp';
+                break;
+            default:
+                $extension = 'jpg'; // Default to jpg
+        }
+        
+        // Create a unique filename
+        $sanitized_name = sanitize_title($business_name);
+        if (strlen($sanitized_name) > 40) {
+            $sanitized_name = substr($sanitized_name, 0, 40);
+        }
+        $filename = $sanitized_name . '-photo-' . $photo_index . '-' . substr(md5($photo_reference), 0, 8) . '.' . $extension;
+        
+        // Save temp file
+        $upload_dir = wp_upload_dir();
+        $temp_file = $upload_dir['path'] . '/' . $filename;
+        file_put_contents($temp_file, $image_data);
+        
+        // Check the filetype
+        $filetype = wp_check_filetype($filename, null);
+        
+        // Prepare attachment data
+        $attachment = [
+            'post_mime_type' => $filetype['type'],
+            'post_title'     => sanitize_text_field($business_name . ' - Google Places Photo ' . $photo_index),
+            'post_content'   => sprintf(
+                __('Photo of %1$s provided by Google Places API. Photo attribution: Google Maps. Reference: %2$s', 'google-places-directory'),
+                $business_name,
+                $photo_reference
+            ),
+            'post_status'    => 'inherit'
+        ];
+        
+        // Insert the attachment
+        $attach_id = wp_insert_attachment($attachment, $temp_file, $post_id);
+        
+        if (!is_wp_error($attach_id)) {
+            // Required for WordPress to create image thumbnails
+            require_once(ABSPATH . 'wp-admin/includes/image.php');
+            
+            // Generate metadata for the attachment
+            $attach_data = wp_generate_attachment_metadata($attach_id, $temp_file);
+            wp_update_attachment_metadata($attach_id, $attach_data);
+            
+            // Store the photo reference as attachment meta
+            update_post_meta($attach_id, '_gpd_photo_reference', $photo_reference);
+            update_post_meta($attach_id, '_gpd_photo_attribution', 'Google Places API');
+            
+            // Clean up the temporary file
+            @unlink($temp_file);
+            
+            return $attach_id;
+        } else {
+            // Clean up on error
+            @unlink($temp_file);
+            error_log('Failed to insert attachment: ' . $attach_id->get_error_message());
+            return false;
+        }
     }
 
     /**
@@ -478,9 +498,58 @@ class GPD_Importer {
                     if ($photo_limit > 0 && !empty($details['photos'])) {
                         // Store the array of photo references
                         $photos_data = $details['photos'];
+                        $featured_image_id = 0;
                         
-                        // Process in batches to avoid rate limits
-                        $batch_results = $this->process_photos_batch($photos_data, $current_post_id, $name, $photo_limit);
+                        // Store references for future use
+                        $photo_refs = [];
+                        
+                        // Process up to the limit
+                        $count = 0;
+                        foreach ($photos_data as $photo_data) {
+                            if ($count >= $photo_limit) {
+                                break;
+                            }
+                            
+                            if (isset($photo_data['name'])) {
+                                $photo_refs[] = $photo_data['name'];
+                                $photo_ref = $photo_data['name'];
+                                
+                                // Check if we already imported this photo
+                                $existing_photo = get_posts([
+                                    'post_type' => 'attachment',
+                                    'posts_per_page' => 1,
+                                    'meta_key' => '_gpd_photo_reference',
+                                    'meta_value' => $photo_ref,
+                                    'fields' => 'ids',
+                                ]);
+                                
+                                if (!empty($existing_photo)) {
+                                    // Photo already exists, use this ID
+                                    $attach_id = $existing_photo[0];
+                                } else {
+                                    // Import the photo
+                                    $attach_id = $this->import_photo($photo_ref, $current_post_id, $name, $count + 1);
+                                }
+                                
+                                // Set the first photo as featured image
+                                if ($attach_id && $count === 0) {
+                                    set_post_thumbnail($current_post_id, $attach_id);
+                                    $featured_image_id = $attach_id;
+                                }
+                                
+                                $count++;
+                            }
+                        }
+                        
+                        // Store photo references as post meta
+                        if (!empty($photo_refs)) {
+                            update_post_meta($current_post_id, '_gpd_photo_references', $photo_refs);
+                        }
+                        
+                        // Store featured image reference
+                        if ($featured_image_id) {
+                            update_post_meta($current_post_id, '_gpd_featured_photo_id', $featured_image_id);
+                        }
                     }
                 }
                 
@@ -508,752 +577,5 @@ class GPD_Importer {
         }
 
         return [ 'created' => $created, 'updated' => $updated ];
-    }
-
-    /**
-     * Get the current batch import progress
-     */
-    public function get_batch_progress($batch_id) {
-        return $this->batch_progress[$batch_id] ?? false;
-    }
-
-    /**
-     * Process batch import with progress tracking
-     */
-    public function process_batch_import($places, $batch_id = null) {
-        if (!$batch_id) {
-            $batch_id = uniqid('gpd_import_');
-        }
-
-        $results = [
-            'batch_id' => $batch_id,
-            'total' => count($places),
-            'processed' => 0,
-            'created' => 0,
-            'updated' => 0,
-            'failed' => 0,
-            'errors' => [],
-            'retry_queue' => []
-        ];
-
-        // Store initial batch status
-        $this->batch_progress[$batch_id] = $results;
-
-        // Process in smaller chunks to avoid timeouts
-        $chunks = array_chunk($places, self::BATCH_SIZE);
-        
-        foreach ($chunks as $chunk) {
-            // Add delay between chunks to respect rate limits
-            if (isset($previous_chunk)) {
-                sleep(self::RETRY_DELAY);
-            }
-
-            foreach ($chunk as $place) {
-                $import_result = $this->process_single_place($place);
-                $results['processed']++;
-
-                if ($import_result['success']) {
-                    if ($import_result['is_update']) {
-                        $results['updated']++;
-                    } else {
-                        $results['created']++;
-                    }
-                } else {
-                    $results['failed']++;
-                    $results['errors'][] = [
-                        'place_id' => $place['place_id'] ?? 'unknown',
-                        'error' => $import_result['error']
-                    ];
-
-                    // Add to retry queue if eligible
-                    if ($import_result['can_retry'] && count($results['retry_queue']) < 50) {
-                        $results['retry_queue'][] = $place;
-                    }
-                }
-
-                // Update progress
-                $this->batch_progress[$batch_id] = $results;
-            }
-            $previous_chunk = true;
-        }
-
-        // Handle retries if any
-        if (!empty($results['retry_queue'])) {
-            $this->process_retry_queue($results);
-        }
-
-        // Clear progress data
-        unset($this->batch_progress[$batch_id]);
-
-        return $results;
-    }
-
-    /**
-     * Process a single place with retries
-     */
-    private function process_single_place($place) {
-        $result = [
-            'success' => false,
-            'is_update' => false,
-            'error' => null,
-            'can_retry' => false
-        ];
-
-        $retry_count = 0;
-        $should_retry = true;
-
-        while ($should_retry && $retry_count < self::MAX_RETRIES) {
-            if ($retry_count > 0) {
-                sleep(self::RETRY_DELAY * $retry_count);
-            }
-
-            $place_id = sanitize_text_field($place['place_id'] ?? '');
-            if (!$place_id) {
-                $result['error'] = new WP_Error('invalid_place', 'Invalid place data');
-                break;
-            }
-
-            // Get full details
-            $details = $this->get_place_details($place_id);
-            if (!$details) {
-                $retry_count++;
-                continue;
-            }
-
-            // Import the place
-            $import_result = $this->import_single_place_details($details);
-            
-            if (is_wp_error($import_result)) {
-                $error_code = $import_result->get_error_code();
-                $result['error'] = $import_result;
-                
-                // Determine if error is retryable
-                $result['can_retry'] = in_array($error_code, [
-                    self::ERROR_API_REQUEST_FAILED,
-                    self::ERROR_RATE_LIMIT
-                ], true);
-
-                if ($result['can_retry']) {
-                    $retry_count++;
-                    continue;
-                }
-                break;
-            }
-
-            // Success
-            $result['success'] = true;
-            $result['is_update'] = $import_result['is_update'] ?? false;
-            $should_retry = false;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Process the retry queue for failed imports
-     */
-    private function process_retry_queue(&$results) {
-        if (empty($results['retry_queue'])) {
-            return;
-        }
-
-        // Wait longer before retrying failed requests
-        sleep(self::RETRY_DELAY * 2);
-
-        foreach ($results['retry_queue'] as $i => $place) {
-            $retry_result = $this->process_single_place($place);
-            
-            // Update counters based on retry result
-            if ($retry_result['success']) {
-                $results['failed']--;
-                if ($retry_result['is_update']) {
-                    $results['updated']++;
-                } else {
-                    $results['created']++;
-                }
-                
-                // Remove successfully processed items
-                unset($results['retry_queue'][$i]);
-                
-                // Remove the error entry
-                foreach ($results['errors'] as $j => $error) {
-                    if ($error['place_id'] === ($place['place_id'] ?? '')) {
-                        unset($results['errors'][$j]);
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Clean up arrays
-        $results['retry_queue'] = array_values($results['retry_queue']);
-        $results['errors'] = array_values($results['errors']);
-    }
-
-    /**
-     * Import a single place from its details
-     */
-    private function import_single_place_details($details) {
-        try {
-            $place_id = sanitize_text_field($details['place_id'] ?? '');
-            if (!$place_id) {
-                return new WP_Error('invalid_place', 'Missing place ID');
-            }
-
-            // Extract and validate required fields
-            $name = sanitize_text_field($details['name'] ?? '');
-            if (!$name) {
-                return new WP_Error('invalid_place', 'Missing business name');
-            }
-
-            // Prepare meta input
-            $meta_input = $this->prepare_place_meta($details);
-
-            // Find locality
-            $locality = $this->extract_locality($details['address_components'] ?? []);
-            
-            // Create/update the post
-            $post_data = [
-                'post_type' => 'business',
-                'post_status' => 'publish',
-                'post_title' => $name,
-                'meta_input' => $meta_input
-            ];
-
-            // Check for existing post
-            $existing_post_id = $this->find_existing_place($place_id);
-            $is_update = false;
-
-            if ($existing_post_id) {
-                $post_data['ID'] = $existing_post_id;
-                $post_id = wp_update_post($post_data, true);
-                $is_update = true;
-            } else {
-                $post_id = wp_insert_post($post_data, true);
-            }
-
-            if (is_wp_error($post_id)) {
-                return $post_id;
-            }
-
-            // Handle taxonomy
-            if ($locality) {
-                $this->handle_locality_taxonomy($post_id, $locality);
-            }            // Handle photos if enabled
-            if (get_option('gpd_photo_limit', 3) > 0) {
-                $this->handle_photos($post_id, $details);
-                
-                // Double-check that a featured image was set
-                if (!get_post_thumbnail_id($post_id)) {
-                    // Try to find the first valid attachment for this post
-                    $attachments = get_posts(array(
-                        'post_type' => 'attachment',
-                        'posts_per_page' => 1,
-                        'post_parent' => $post_id,
-                        'meta_key' => '_gpd_photo_reference',
-                        'orderby' => 'ID',
-                        'order' => 'ASC'
-                    ));
-                    
-                    if (!empty($attachments)) {
-                        error_log('Setting featured image through fallback method for business ' . $post_id);
-                        set_post_thumbnail($post_id, $attachments[0]->ID);
-                    }
-                }
-            }
-
-            return [
-                'post_id' => $post_id,
-                'is_update' => $is_update
-            ];
-
-        } catch (Exception $e) {
-            return new WP_Error('import_failed', $e->getMessage());
-        }
-    }
-
-    /**
-     * Helper: Extract locality from address components
-     */
-    private function extract_locality($components) {
-        foreach ($components as $comp) {
-            if (in_array('locality', (array)($comp['types'] ?? []), true)) {
-                return sanitize_text_field($comp['long_name']);
-            }
-        }
-        return '';
-    }
-
-    /**
-     * Helper: Handle locality taxonomy terms
-     */
-    private function handle_locality_taxonomy($post_id, $locality) {
-        if (!term_exists($locality, 'destination')) {
-            wp_insert_term($locality, 'destination');
-        }
-        wp_set_object_terms($post_id, $locality, 'destination', false);
-        clean_object_term_cache($post_id, 'destination');
-    }
-
-    /**
-     * Helper: Find existing place by place_id
-     */
-    private function find_existing_place($place_id) {
-        $existing = get_posts([
-            'post_type' => 'business',
-            'meta_key' => '_gpd_place_id',
-            'meta_value' => $place_id,
-            'fields' => 'ids',
-            'posts_per_page' => 1
-        ]);
-        return !empty($existing) ? $existing[0] : 0;
-    }
-
-    /**
-     * Helper: Prepare place meta data
-     */
-    private function prepare_place_meta($details) {
-        return [
-            '_gpd_place_id' => $details['place_id'] ?? '',
-            '_gpd_display_name' => $details['name'] ?? '',
-            '_gpd_address' => $details['formatted_address'] ?? '',
-            '_gpd_latitude' => $details['geometry']['location']['lat'] ?? 0,
-            '_gpd_longitude' => $details['geometry']['location']['lng'] ?? 0,
-            '_gpd_types' => wp_json_encode($details['types'] ?? []),
-            '_gpd_rating' => floatval($details['rating'] ?? 0),
-            '_gpd_business_status' => $details['business_status'] ?? '',
-            '_gpd_maps_uri' => esc_url_raw($details['url'] ?? ''),
-            '_gpd_website' => esc_url_raw($details['website'] ?? ''),
-            '_gpd_phone_number' => sanitize_text_field($details['international_phone_number'] ?? ''),
-            '_gpd_api_version' => 'places_v1'
-        ];
-    }
-    
-    /**
-     * Helper: Handle photos for a business
-     */
-    private function handle_photos($post_id, $details) {
-        if (empty($details['photos'])) {
-            return;
-        }
-        
-        $photo_limit = (int)get_option('gpd_photo_limit', 3);
-        if ($photo_limit <= 0) {
-            return;
-        }
-
-        $featured_image_id = 0;
-        $photo_refs = [];
-        
-        // Process up to the limit
-        $count = 0;
-        foreach ($details['photos'] as $photo_data) {
-            if ($count >= $photo_limit) {
-                break;
-            }
-            
-            if (!isset($photo_data['name'])) {
-                continue;
-            }
-            
-            $photo_refs[] = $photo_data['name'];
-            $photo_ref = $photo_data['name'];
-            
-            // Check if photo already exists
-            $existing_photo = get_posts([
-                'post_type' => 'attachment',
-                'posts_per_page' => 1,
-                'meta_key' => '_gpd_photo_reference',
-                'meta_value' => $photo_ref,
-                'fields' => 'ids'
-            ]);
-            
-            $attach_id = 0;
-            if (!empty($existing_photo)) {
-                $attach_id = $existing_photo[0];
-            } else {
-                $attach_id = $this->import_photo($photo_ref, $post_id, $details['name'], $count + 1);
-            }
-            
-            // Always set first successfully imported photo as featured image
-            if ($attach_id && !$featured_image_id) {
-                $result = set_post_thumbnail($post_id, $attach_id);
-                if ($result) {
-                    $featured_image_id = $attach_id;
-                    // Store the featured photo ID as backup
-                    update_post_meta($post_id, '_gpd_featured_photo_id', $attach_id);
-                } else {
-                    error_log('GPD: Failed to set featured image for business ' . $post_id . ' using attachment ' . $attach_id);
-                }
-            }
-            
-            $count++;
-        }
-        
-        // Update photo references
-        if (!empty($photo_refs)) {
-            update_post_meta($post_id, '_gpd_photo_references', $photo_refs);
-        }
-    }
-      /**
-     * Import a single photo from the Places API
-     */
-    private function import_photo($photo_reference, $post_id, $business_name, $photo_number) {
-        if (empty($photo_reference) || empty($this->api_key)) {
-            error_log('Missing photo reference or API key for business ' . $post_id);
-            return false;
-        }
-        
-        // Ensure business name is valid for filename
-        $business_name = !empty($business_name) ? sanitize_title($business_name) : 'business';
-        
-        // Build the photo URL using the Places API v1 format
-        $url = "{$this->details_endpoint}{$photo_reference}/media";
-        
-        // Set up headers for the photo request
-        $headers = [
-            'X-Goog-Api-Key' => $this->api_key,
-            'Accept' => 'image/*'  // Ensure we get an image back
-        ];
-        
-        error_log('Downloading photo ' . $photo_number . ' for business ' . $post_id . ' using reference: ' . $photo_reference);
-        
-        // Make the request to get the photo
-        $response = wp_remote_get($url, [
-            'headers' => $headers,
-            'timeout' => 30,
-            'sslverify' => true
-        ]);
-        
-        // Check for errors
-        if (is_wp_error($response)) {
-            error_log('Failed to download photo: ' . $response->get_error_message());
-            return false;
-        }
-        
-        $status_code = wp_remote_retrieve_response_code($response);
-        if ($status_code !== 200) {
-            error_log('Failed to download photo. HTTP Status: ' . $status_code);
-            return false;
-        }
-        
-        // Get the image data
-        $image_data = wp_remote_retrieve_body($response);
-        if (empty($image_data) || strlen($image_data) < 100) { // Basic check for valid image data
-            error_log('Empty or invalid image data received');
-            return false;
-        }
-        
-        // Get the content type to determine file extension
-        $content_type = wp_remote_retrieve_header($response, 'content-type');
-        $ext = $this->get_file_extension_from_content_type($content_type);
-        
-        // Generate a unique filename with sanitized business name
-        $filename = sanitize_file_name($business_name . '-photo-' . $photo_number . $ext);
-        
-        // Create temp file
-        $temp_file = wp_tempnam($filename);
-        if (!$temp_file || !file_put_contents($temp_file, $image_data)) {
-            error_log('Failed to create or write to temp file');
-            return false;
-        }
-        
-        // Prepare file array for wp_handle_sideload
-        $file = [
-            'name' => $filename,
-            'type' => $content_type,
-            'tmp_name' => $temp_file,
-            'error' => 0,
-            'size' => filesize($temp_file)
-        ];
-        
-        // Handle the upload
-        $overrides = [
-            'test_form' => false,
-            'test_size' => true,
-        ];
-        
-        // Move the file to uploads directory
-        $file_data = wp_handle_sideload($file, $overrides);
-        
-        // Check for errors in sideloading
-        if (isset($file_data['error'])) {
-            error_log('Failed to handle photo sideload: ' . $file_data['error']);
-            @unlink($temp_file);
-            return false;
-        }
-        
-        // Make sure required file data exists
-        if (empty($file_data['file']) || empty($file_data['type'])) {
-            error_log('Invalid file data after sideload');
-            @unlink($temp_file);
-            return false;
-        }
-        
-        // Prepare attachment data
-        $attachment = [
-            'post_mime_type' => $file_data['type'],
-            'post_title' => $business_name . ' - Photo ' . $photo_number,
-            'post_content' => '',
-            'post_status' => 'inherit',
-            'post_parent' => $post_id
-        ];
-        
-        // Include image functions if needed
-        if (!function_exists('wp_generate_attachment_metadata')) {
-            require_once(ABSPATH . 'wp-admin/includes/image.php');
-            require_once(ABSPATH . 'wp-admin/includes/media.php');
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-        }
-        
-        // Insert attachment
-        $attach_id = wp_insert_attachment($attachment, $file_data['file'], $post_id);
-        
-        if (is_wp_error($attach_id)) {
-            error_log('Failed to insert attachment: ' . $attach_id->get_error_message());
-            @unlink($temp_file);
-            return false;
-        }
-        
-        if (!$attach_id || $attach_id == 0) {
-            error_log('Zero or invalid attachment ID returned by wp_insert_attachment');
-            @unlink($temp_file);
-            return false;
-        }
-        
-        // Generate attachment metadata
-        $attach_data = wp_generate_attachment_metadata($attach_id, $file_data['file']);
-        wp_update_attachment_metadata($attach_id, $attach_data);
-        
-        // Store the photo reference as attachment meta
-        update_post_meta($attach_id, '_gpd_photo_reference', $photo_reference);
-        update_post_meta($attach_id, '_gpd_photo_attribution', 'Google Places API');
-        
-        // Clean up temp file
-        @unlink($temp_file);
-        
-        error_log('Successfully created attachment ID ' . $attach_id . ' for business ' . $post_id . ' photo ' . $photo_number);
-        
-        return $attach_id;
-    }
-    
-    /**
-     * Helper: Get file extension from content type
-     */
-    private function get_file_extension_from_content_type($content_type) {
-        switch ($content_type) {
-            case 'image/jpeg':
-                return '.jpg';
-            case 'image/png':
-                return '.png';
-            case 'image/gif':
-                return '.gif';
-            case 'image/webp':
-                return '.webp';
-            default:
-                return '.jpg'; // Default to jpg
-        }
-    }
-    
-    /**
-     * Filter to remove upload size limit for photos from Google Places API
-     */
-    public function remove_upload_size_limit() {
-        return PHP_INT_MAX;
-    }
-
-    /**
-     * Validate rating value
-     *
-     * @param mixed $rating Rating value from API
-     * @return float Validated rating between 0 and 5
-     */
-    private function validate_rating($rating) {
-        $rating = floatval($rating);
-        
-        // Ensure rating is between 0 and 5
-        if ($rating < 0) {
-            return 0;
-        }
-        
-        if ($rating > 5) {
-            return 5;
-        }
-        
-        return round($rating, 1);
-    }
-    
-    /**
-     * Validate a coordinate value
-     *
-     * @param mixed $coordinate Latitude or longitude value
-     * @return float Validated coordinate
-     */
-    private function validate_coordinate($coordinate) {
-        $coordinate = floatval($coordinate);
-        
-        // Basic validation to ensure coordinates are within possible Earth values
-        // Latitude: -90 to 90, Longitude: -180 to 180
-        if ($coordinate < -180) {
-            return -180;
-        }
-        
-        if ($coordinate > 180) {
-            return 180;
-        }
-        
-        return $coordinate;
-    }
-    
-    /**
-     * Sanitize place types array
-     *
-     * @param array $types Array of place types from API
-     * @return array Sanitized array of place types
-     */
-    private function sanitize_place_types($types) {
-        if (!is_array($types)) {
-            return [];
-        }
-        
-        $sanitized = [];
-        
-        foreach ($types as $type) {
-            if (is_string($type)) {
-                $sanitized[] = sanitize_text_field($type);
-            }
-        }
-        
-        return $sanitized;
-    }
-
-    /**
-     * Process a batch of photos for a business
-     * 
-     * @param array $photos_data Array of photo data from the Places API
-     * @param int $post_id The post ID of the business
-     * @param string $business_name Name of the business
-     * @param int $photo_limit Maximum number of photos to process
-     * @return array Results of the photo processing
-     */
-    private function process_photos_batch($photos_data, $post_id, $business_name, $photo_limit) {
-        if (empty($photos_data) || empty($post_id) || $photo_limit <= 0) {
-            return [
-                'success' => false,
-                'photos_processed' => 0,
-                'message' => 'Invalid input data'
-            ];
-        }
-        
-        $featured_image_id = 0;
-        $photo_refs = [];
-        $photos_added = 0;
-        $results = [];
-        
-        // Process photos up to the limit
-        $photos = array_slice($photos_data, 0, $photo_limit);
-        
-        foreach ($photos as $index => $photo_data) {
-            if (!isset($photo_data['name'])) {
-                $results[] = [
-                    'status' => 'error',
-                    'message' => 'No photo name/reference found',
-                    'photo_data' => $photo_data
-                ];
-                continue;
-            }
-            
-            $photo_refs[] = $photo_data['name'];
-            $photo_ref = $photo_data['name'];
-            
-            // Check if photo already exists
-            $existing_photo = get_posts([
-                'post_type' => 'attachment',
-                'posts_per_page' => 1,
-                'meta_key' => '_gpd_photo_reference',
-                'meta_value' => $photo_ref,
-                'fields' => 'ids'
-            ]);
-            
-            $attach_id = 0;
-            if (!empty($existing_photo)) {
-                $attach_id = $existing_photo[0];
-                $results[] = [
-                    'status' => 'success',
-                    'message' => 'Using existing photo',
-                    'attachment_id' => $attach_id,
-                    'photo_reference' => $photo_ref
-                ];
-            } else {
-                $attach_id = $this->import_photo($photo_ref, $post_id, $business_name, $index + 1);
-                
-                if ($attach_id) {
-                    $photos_added++;
-                    $results[] = [
-                        'status' => 'success',
-                        'message' => 'Imported new photo',
-                        'attachment_id' => $attach_id,
-                        'photo_reference' => $photo_ref
-                    ];
-                } else {
-                    $results[] = [
-                        'status' => 'error',
-                        'message' => 'Failed to download or attach photo',
-                        'photo_reference' => $photo_ref
-                    ];
-                }
-            }
-            
-        // Set first photo as featured image
-            if ($attach_id && $index === 0) {
-                // First try the WordPress function
-                $result = set_post_thumbnail($post_id, $attach_id);
-                
-                // If that fails, try direct database update
-                if (!$result) {
-                    global $wpdb;
-                    update_post_meta($post_id, '_thumbnail_id', $attach_id);
-                    error_log('Used direct update for featured image on post ' . $post_id . ' with attachment ' . $attach_id);
-                }
-                
-                // Store the featured image ID
-                $featured_image_id = $attach_id;
-                
-                // Check if it was actually set
-                $check_id = get_post_thumbnail_id($post_id);
-                if (!$check_id) {
-                    error_log('Failed to set featured image for post ' . $post_id . ' with attachment ' . $attach_id);
-                } else {
-                    error_log('Successfully set featured image for post ' . $post_id . ' with attachment ' . $attach_id);
-                }
-            }
-        }
-        
-        // Save photo references to post meta
-        if (!empty($photo_refs)) {
-            update_post_meta($post_id, '_gpd_photo_references', $photo_refs);
-        }
-        
-        // Save featured image reference
-        if ($featured_image_id) {
-            // Store our own reference in case we need it later
-            update_post_meta($post_id, '_gpd_featured_photo_id', $featured_image_id);
-            
-            // Double check the thumbnail was set
-            $current_thumbnail_id = get_post_thumbnail_id($post_id);
-            if (!$current_thumbnail_id) {
-                // Try one more time directly
-                update_post_meta($post_id, '_thumbnail_id', $featured_image_id);
-            }
-        }
-        
-        return [
-            'success' => true,
-            'photos_processed' => count($photos),
-            'photos_added' => $photos_added,
-            'photo_references' => $photo_refs,
-            'featured_image_id' => $featured_image_id,
-            'results' => $results
-        ];
     }
 }
