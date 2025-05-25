@@ -51,6 +51,9 @@ class GPD_Importer {
             return $cached['places'];
         }
 
+        // Track this API request
+        do_action('gpd_before_places_api_request', 'text_search');
+
         // No cache: prepare request headers
         $headers = [
             'Content-Type'     => 'application/json',
@@ -158,8 +161,10 @@ class GPD_Importer {
     /**
      * Fetch full Place Details for accurate address_components
      */
-    private function get_place_details( $place_id ) {
-        // Headers for authentication and field selection - Added photos to the field mask
+    public function get_place_details( $place_id ) {
+        // Track this API request
+        do_action('gpd_before_places_api_request', 'place_details');
+
         $headers = [
             'X-Goog-Api-Key'   => $this->api_key,
             'X-Goog-FieldMask' => 'id,displayName,formattedAddress,addressComponents,types,websiteUri,internationalPhoneNumber,googleMapsUri,rating,businessStatus,location,photos'

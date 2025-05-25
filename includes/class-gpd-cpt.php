@@ -14,17 +14,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class GPD_CPT {
-    private static $instance = null;
-
-    public static function instance() {
+    private static $instance = null;    public static function instance() {
         if (self::$instance === null) {
             self::$instance = new self();
+            self::$instance->init();
         }
         return self::$instance;
     }    public function init() {
-        // Register post types and taxonomies after translations are loaded (init priority 0)
-        add_action('init', [$this, 'register_post_type_and_taxonomies'], 20);
-        add_action('init', [$this, 'register_custom_meta'], 21);
+        // Register post types and taxonomies after translations are loaded (init priority 1)
+        // Use priority 10 to ensure translations are loaded first (at priority 1)
+        add_action('init', [$this, 'register_post_type_and_taxonomies'], 10);
+        add_action('init', [$this, 'register_custom_meta'], 11);
         
         // These hooks don't need to be on init and won't trigger translations
         add_filter('content_save_pre', [$this, 'allow_html_for_business_cpt']);

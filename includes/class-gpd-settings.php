@@ -22,8 +22,18 @@ class GPD_Settings {
     }
 
     private function init_hooks() {
-        add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
-        add_action( 'admin_post_gpd_save_settings', array( $this, 'save_settings' ) );
+        add_action('admin_menu', array($this, 'add_settings_page'));
+        add_action('admin_post_gpd_save_settings', array($this, 'save_settings'));
+        add_action('admin_init', array($this, 'register_api_usage_settings'));
+    }
+
+    /**
+     * Register API usage tracking settings
+     */
+    public function register_api_usage_settings() {
+        register_setting('gpd_settings', 'gpd_api_usage_email');
+        register_setting('gpd_settings', 'gpd_api_usage_threshold');
+        register_setting('gpd_settings', 'gpd_api_usage_alert_frequency');
     }
 
     public function add_settings_page() {
@@ -37,9 +47,18 @@ class GPD_Settings {
         );
     }
 
+    /**
+     * Add API usage settings fields
+     */
     public function render_settings_page() {
         $api_key = get_option( 'gpd_api_key', '' );
         $photo_limit = get_option( 'gpd_photo_limit', 3 ); // Default to 3 photos
+        $enable_email_alerts = get_option( 'gpd_enable_email_alerts', 0 );
+        $enable_daily_report = get_option( 'gpd_enable_daily_report', 0 );
+        $enable_weekly_report = get_option( 'gpd_enable_weekly_report', 0 );
+        $alert_email = get_option( 'gpd_alert_email', '' );
+        $daily_cost_threshold = get_option( 'gpd_daily_cost_threshold', 0 );
+        $daily_request_limit = get_option( 'gpd_daily_request_limit', 0 );
 
         if ( isset( $_GET['settings-updated'] ) ) {
             add_settings_error( 'gpd_messages', 'gpd_message', __( 'Settings saved.', 'google-places-directory' ), 'updated' );
@@ -52,9 +71,7 @@ class GPD_Settings {
             
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
                 <?php wp_nonce_field( 'gpd_save_settings_action', 'gpd_save_settings_nonce' ); ?>
-                <input type="hidden" name="action" value="gpd_save_settings">
-
-                <table class="form-table" role="presentation">
+                <input type="hidden" name="action" value="gpd_save_settings">                <table class="form-table" role="presentation">
                     <tr>
                         <th scope="row"><label for="gpd_api_key"><?php esc_html_e( 'API Key', 'google-places-directory' ); ?></label></th>
                         <td>
@@ -64,7 +81,53 @@ class GPD_Settings {
                                 <a href="https://console.cloud.google.com/apis/library/places.googleapis.com" target="_blank"><?php esc_html_e( 'Enable API', 'google-places-directory' ); ?></a>
                             </p>
                         </td>
-                    </tr>                    <!-- Photo settings moved to Photo Management page -->
+                    </tr>
+                </table>
+
+                <h2><?php esc_html_e('API Usage Settings', 'google-places-directory'); ?></h2>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row">
+                            <label for="gpd_api_usage_email"><?php esc_html_e('Alert Email', 'google-places-directory'); ?></label>
+                        </th>
+                        <td>
+                            <input type="email" id="gpd_api_usage_email" name="gpd_api_usage_email" 
+                                   value="<?php echo esc_attr(get_option('gpd_api_usage_email')); ?>" class="regular-text">
+                            <p class="description">
+                                <?php esc_html_e('Email address for API usage alerts', 'google-places-directory'); ?>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="gpd_api_usage_threshold"><?php esc_html_e('Usage Threshold', 'google-places-directory'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" id="gpd_api_usage_threshold" name="gpd_api_usage_threshold" 
+                                   value="<?php echo esc_attr(get_option('gpd_api_usage_threshold', 1000)); ?>" class="small-text">
+                            <p class="description">
+                                <?php esc_html_e('Send alert when daily API calls exceed this number', 'google-places-directory'); ?>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="gpd_api_usage_alert_frequency"><?php esc_html_e('Alert Frequency', 'google-places-directory'); ?></label>
+                        </th>
+                        <td>
+                            <select id="gpd_api_usage_alert_frequency" name="gpd_api_usage_alert_frequency">
+                                <option value="daily" <?php selected(get_option('gpd_api_usage_alert_frequency'), 'daily'); ?>>
+                                    <?php esc_html_e('Daily', 'google-places-directory'); ?>
+                                </option>
+                                <option value="weekly" <?php selected(get_option('gpd_api_usage_alert_frequency'), 'weekly'); ?>>
+                                    <?php esc_html_e('Weekly', 'google-places-directory'); ?>
+                                </option>
+                            </select>
+                            <p class="description">
+                                <?php esc_html_e('How often to send usage reports', 'google-places-directory'); ?>
+                            </p>
+                        </td>
+                    </tr>
                 </table>
                 
                 <h2><?php esc_html_e( 'API Key Requirements', 'google-places-directory' ); ?></h2>
@@ -165,23 +228,32 @@ class GPD_Settings {
         <?php
     }
 
+    /**
+     * Save API usage settings
+     */
     public function save_settings() {
         if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_settings_action', 'gpd_save_settings_nonce' ) ) {
             wp_die( __( 'Permission denied', 'google-places-directory' ) );
-        }        if ( isset( $_POST['gpd_api_key'] ) ) {
+        }
+
+        // Save API key
+        if ( isset( $_POST['gpd_api_key'] ) ) {
             update_option( 'gpd_api_key', sanitize_text_field( wp_unslash( $_POST['gpd_api_key'] ) ) );
         }
 
-        $redirect_url = add_query_arg(
-            array(
-                'post_type'       => 'business',
-                'page'            => 'gpd-settings',
-                'settings-updated'=> 'true',
-            ),
-            admin_url( 'edit.php' )
-        );
+        // Save API usage settings
+        if (isset($_POST['gpd_api_usage_email'])) {
+            update_option('gpd_api_usage_email', sanitize_email($_POST['gpd_api_usage_email']));
+        }
+        if (isset($_POST['gpd_api_usage_threshold'])) {
+            update_option('gpd_api_usage_threshold', absint($_POST['gpd_api_usage_threshold']));
+        }
+        if (isset($_POST['gpd_api_usage_alert_frequency'])) {
+            update_option('gpd_api_usage_alert_frequency', sanitize_text_field($_POST['gpd_api_usage_alert_frequency']));
+        }
 
-        wp_redirect( $redirect_url );
+        // Redirect back to settings page
+        wp_redirect(add_query_arg('updated', 'true', wp_get_referer()));
         exit;
     }
 }
@@ -242,12 +314,10 @@ add_action('wp_ajax_gpd_test_api', function() {
             $error_message
         ));
         return;
-    }
-    
-    if (empty($body['places'])) {
+    }    if (empty($body['places'])) {
         wp_send_json_error(__('API returned successfully but no places were found. Your API key appears to be working with Places API.', 'google-places-directory'));
         return;
     }
     
-    wp_send_json_success(__('Success! Your API key is working correctly with the Places API.', 'google-places-directory'));
+    wp_send_json_success(__('API test successful! Your API key is working correctly with Places API.', 'google-places-directory'));
 });

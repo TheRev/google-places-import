@@ -315,13 +315,6 @@ class GPD_API_Usage {
         <?php
     }
 
-    private function get_thresholds() {
-        return array(
-            'daily_cost' => floatval(get_option('gpd_daily_cost_threshold', $this->default_thresholds['daily_cost'])),
-            'request_limit' => intval(get_option('gpd_daily_request_limit', $this->default_thresholds['request_limit']))
-        );
-    }
-
     private function calculate_total_cost() {
         $text_search_cost = ($this->daily_requests['text_search'] / 1000) * 5;
         $place_details_cost = ($this->daily_requests['place_details'] / 1000) * 4;
@@ -329,24 +322,31 @@ class GPD_API_Usage {
         return $text_search_cost + $place_details_cost + $photos_cost;
     }
 
-    private function get_usage_history($days = 7) {
-        return get_option('gpd_usage_history', array());
+    /**
+     * Get API usage history for the last 30 days
+     * 
+     * @return array Usage history data
+     */
+    public function get_usage_history() {
+        return $this->usage_history;
     }
 
-    public function track_places_request($type = 'text_search') {
-        if (isset($this->daily_requests[$type])) {
-            $this->daily_requests[$type]++;
-            update_option('gpd_daily_api_usage', $this->daily_requests);
-            $this->check_thresholds();
-        }
-    }
-
-    public function track_photo_request() {
-        $this->daily_requests['photos']++;
-        update_option('gpd_daily_api_usage', $this->daily_requests);
-    }
-
-    public function get_daily_usage() {
+    /**
+     * Get the current day's API usage counts
+     * 
+     * @return array Daily request counts by type
+     */
+    public function get_daily_counts() {
         return $this->daily_requests;
+    }    /**
+     * Get the current usage thresholds
+     * 
+     * @return array Threshold settings
+     */
+    public function get_thresholds() {
+        return array_merge($this->default_thresholds, array(
+            'daily_cost' => get_option('gpd_daily_cost_threshold', $this->default_thresholds['daily_cost']),
+            'request_limit' => get_option('gpd_daily_request_limit', $this->default_thresholds['request_limit'])
+        ));
     }
 }

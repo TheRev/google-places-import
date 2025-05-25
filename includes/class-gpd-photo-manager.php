@@ -1167,45 +1167,48 @@ public function ajax_refresh_photos() {
  * @return int|bool Attachment ID on success, false on failure
  */
 private function download_and_attach_photo($photo_url, $post_id, $photo_reference) {
-    // Check if we already have this photo
-    $existing = new WP_Query(array(
-        'post_type' => 'attachment',
-        'posts_per_page' => 1,
-        'fields' => 'ids',
-        'meta_query' => array(
-            array(
-                'key' => '_gpd_photo_reference',
-                'value' => $photo_reference,
+        // Check if we already have this photo
+        $existing = new WP_Query(array(
+            'post_type' => 'attachment',
+            'posts_per_page' => 1,
+            'fields' => 'ids',
+            'meta_query' => array(
+                array(
+                    'key' => '_gpd_photo_reference',
+                    'value' => $photo_reference,
+                ),
             ),
-        ),
-    ));
-    
-    if ($existing->have_posts()) {
-        return $existing->posts[0];
-    }
-    
-    // Get business name for image title
-    $business_name = get_the_title($post_id);
-    
-    // Include required files for media handling
-    require_once(ABSPATH . 'wp-admin/includes/image.php');
-    require_once(ABSPATH . 'wp-admin/includes/file.php');
-    require_once(ABSPATH . 'wp-admin/includes/media.php');
-    
-    $api_key = get_option('gpd_api_key');
-    
-    // For Places API v1, the correct format is to request from the media endpoint
-    $url = 'https://places.googleapis.com/v1/' . $photo_reference . '/media?key=' . $api_key . '&maxHeightPx=1200&maxWidthPx=1200';
-    
-    // Make the request with proper headers
-    $response = wp_remote_get($url, array(
-        'timeout' => 30,
-        'headers' => array(
-            // IMPORTANT: The "Accept" header for binary data
-            'Accept' => 'image/*',
-            'X-Goog-Api-Key' => $api_key,
-            'X-Goog-FieldMask' => 'name'
-        )
+        ));
+        
+        if ($existing->have_posts()) {
+            return $existing->posts[0];
+        }
+
+        // Track this photo API request
+        do_action('gpd_before_photo_api_request');
+
+        // Get business name for image title
+        $business_name = get_the_title($post_id);
+        
+        // Include required files for media handling
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+        require_once(ABSPATH . 'wp-admin/includes/file.php');
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
+        
+        $api_key = get_option('gpd_api_key');
+        
+        // For Places API v1, the correct format is to request from the media endpoint
+        $url = 'https://places.googleapis.com/v1/' . $photo_reference . '/media?key=' . $api_key . '&maxHeightPx=1200&maxWidthPx=1200';
+        
+        // Make the request with proper headers
+        $response = wp_remote_get($url, array(
+            'timeout' => 30,
+            'headers' => array(
+                // IMPORTANT: The "Accept" header for binary data
+                'Accept' => 'image/*',
+                'X-Goog-Api-Key' => $api_key,
+                'X-Goog-FieldMask' => 'name'
+            )
     ));
     
     if (is_wp_error($response)) {
