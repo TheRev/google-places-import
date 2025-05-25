@@ -15,6 +15,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 class GPD_Docs {
     private static $instance = null;
     private $tabs = array();
+    private $registered_plugins = array();
+    private $sections = array();
 
     public static function instance() {
         if ( self::$instance === null ) {
@@ -703,6 +705,232 @@ class GPD_Docs {
     public static function add_tab( $slug, $title, $callback = null, $priority = 50 ) {
         $instance = self::instance();
         return $instance->register_tab( $slug, $title, $callback, $priority );
+    }
+
+    /**
+     * Register a related plugin with the documentation system
+     *
+     * @param string $plugin_slug Unique plugin identifier
+     * @param array  $args {
+     *     Plugin registration arguments
+     *     @type string $title       Plugin display title
+     *     @type string $version     Plugin version
+     *     @type string $description Plugin description
+     *     @type array  $sections    Documentation sections provided by this plugin
+     *     @type string $path        Path to plugin documentation files
+     * }
+     * @return bool Success
+     */
+    public function register_plugin($plugin_slug, $args) {
+        if (empty($plugin_slug)) {
+            return false;
+        }
+
+        $defaults = array(
+            'title'       => '',
+            'version'     => '',
+            'description' => '',
+            'sections'    => array(),
+            'path'        => '',
+        );
+
+        $args = wp_parse_args($args, $defaults);
+        
+        // Store plugin information
+        $this->registered_plugins[$plugin_slug] = $args;
+
+        // Register any provided documentation sections
+        if (!empty($args['sections'])) {
+            foreach ($args['sections'] as $section_slug => $section) {
+                $this->register_section($section_slug, $section, $plugin_slug);
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Register a documentation section
+     *
+     * @param string $section_slug Unique section identifier
+     * @param array  $section {
+     *     Section configuration
+     *     @type string   $title      Section display title
+     *     @type string   $content    Section content (HTML or markdown)
+     *     @type callable $callback   Optional callback to render content
+     *     @type int      $priority   Display order within tab (default: 10)
+     *     @type array    $related    Related section slugs
+     *     @type string   $tab        Tab to display in (default: 'general')
+     * }
+     * @param string $plugin_slug Plugin that provides this section
+     * @return bool Success
+     */
+    public function register_section($section_slug, $section, $plugin_slug) {
+        if (empty($section_slug)) {
+            return false;
+        }
+
+        $defaults = array(
+            'title'       => '',
+            'content'     => '',
+            'callback'    => null,
+            'priority'    => 10,
+            'related'     => array(),
+            'tab'         => 'general',
+        );
+
+        $section = wp_parse_args($section, $defaults);
+        $section['plugin'] = $plugin_slug;
+
+        // Store the section
+        $this->sections[$section_slug] = $section;
+
+        return true;
+    }
+
+    /**
+     * Get documentation for a specific plugin
+     *
+     * @param string $plugin_slug Plugin identifier
+     * @return array Plugin documentation data
+     */
+    public function get_plugin_docs($plugin_slug) {
+        if (!isset($this->registered_plugins[$plugin_slug])) {
+            return array();
+        }
+
+        $plugin_data = $this->registered_plugins[$plugin_slug];
+        $sections = array_filter($this->sections, function($section) use ($plugin_slug) {
+            return $section['plugin'] === $plugin_slug;
+        });
+
+        return array(
+            'info' => $plugin_data,
+            'sections' => $sections
+        );
+    }
+
+    /**
+     * Get related documentation sections
+     *
+     * @param string $section_slug Section identifier
+     * @return array Related documentation sections
+     */
+    public function get_related_sections($section_slug) {
+        if (!isset($this->sections[$section_slug])) {
+            return array();
+        }
+
+        $section = $this->sections[$section_slug];
+        $related = array();
+
+        if (!empty($section['related'])) {
+            foreach ($section['related'] as $related_slug) {
+                if (isset($this->sections[$related_slug])) {
+                    $related[$related_slug] = $this->sections[$related_slug];
+                }
+            }
+        }
+
+        return $related;
+    }
+
+    /**
+     * Render a documentation tab
+     *
+     * @param string $tab_slug Tab identifier
+     */
+    private function render_tab( $tab_slug ) {
+        if ( !isset($this->tabs[$tab_slug]) ) {
+            return;
+        }
+
+        $tab = $this->tabs[$tab_slug];
+
+        echo '<div class="gpd-docs-tab-content">';
+
+        // If there's a direct callback, use it
+        if ( is_callable($tab['callback']) ) {
+            call_user_func( $tab['callback'] );
+        }
+
+        // Get and render any sections for this tab
+        $sections = array_filter( $this->sections, function( $section ) use ( $tab_slug ) {
+            return $section['tab'] === $tab_slug;
+        });
+
+        if ( !empty($sections) ) {
+            // Sort sections by priority
+            uasort( $sections, function( $a, $b ) {
+                return $a['priority'] - $b['priority'];
+            });
+
+            foreach ( $sections as $section_slug => $section ) {
+                $this->render_section( $section_slug, $section );
+            }
+        }
+
+        // Allow plugins to add content after the tab
+        do_action("gpd_docs_tab_{$tab_slug}_content");
+
+        echo '</div>';
+    }
+
+    /**
+     * Render a documentation section
+     *
+     * @param string $section_slug Section identifier
+     * @param array  $section Section data
+     */
+    private function render_section( $section_slug, $section ) {
+        $plugin_data = isset($this->registered_plugins[$section['plugin']]) 
+            ? $this->registered_plugins[$section['plugin']] 
+            : null;
+
+        echo '<div class="gpd-docs-section" id="section-' . esc_attr($section_slug) . '">';
+        
+        // Section header with plugin attribution if available
+        echo '<div class="gpd-docs-section-header">';
+        echo '<h3>' . esc_html($section['title']) . '</h3>';
+        if ( $plugin_data ) {
+            echo '<span class="gpd-docs-plugin-attribution">';
+            echo sprintf(
+                /* translators: %s: Plugin name */
+                esc_html__('Provided by %s', 'google-places-directory'),
+                '<a href="#plugin-' . esc_attr($section['plugin']) . '">' . 
+                esc_html($plugin_data['title']) . '</a>'
+            );
+            echo '</span>';
+        }
+        echo '</div>';
+
+        // Section content
+        echo '<div class="gpd-docs-section-content">';
+        if ( is_callable($section['callback']) ) {
+            call_user_func($section['callback']);
+        } else {
+            echo wp_kses_post($section['content']);
+        }
+        echo '</div>';
+
+        // Related sections if any
+        $related = $this->get_related_sections($section_slug);
+        if ( !empty($related) ) {
+            echo '<div class="gpd-docs-related-sections">';
+            echo '<h4>' . esc_html__('Related Topics', 'google-places-directory') . '</h4>';
+            echo '<ul>';
+            foreach ( $related as $related_slug => $related_section ) {
+                printf(
+                    '<li><a href="#section-%s">%s</a></li>',
+                    esc_attr($related_slug),
+                    esc_html($related_section['title'])
+                );
+            }
+            echo '</ul>';
+            echo '</div>';
+        }
+
+        echo '</div>';
     }
 }
 

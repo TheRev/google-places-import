@@ -14,20 +14,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 class GPD_CPT {
+    private static $instance = null;
+
     public static function instance() {
-        static $instance = null;
-        if ( ! $instance ) {
-            $instance = new self();
-            add_action( 'init', [ $instance, 'register_post_type_and_taxonomies' ], 0 );
-            add_action( 'init', [ $instance, 'register_custom_meta' ], 1 ); // Ensure CPT exists before registering meta for it
-            add_filter( 'content_save_pre', [ $instance, 'allow_html_for_business_cpt' ] );
-            add_action( 'restrict_manage_posts', [ $instance, 'add_taxonomy_filters' ] );
-            
-            // Add business data to admin columns
-            add_filter( 'manage_business_posts_columns', [ $instance, 'add_business_columns' ] );
-            add_action( 'manage_business_posts_custom_column', [ $instance, 'render_business_column' ], 10, 2 );
+        if (self::$instance === null) {
+            self::$instance = new self();
         }
-        return $instance;
+        return self::$instance;
+    }    public function init() {
+        // Register post types and taxonomies after translations are loaded (init priority 0)
+        add_action('init', [$this, 'register_post_type_and_taxonomies'], 20);
+        add_action('init', [$this, 'register_custom_meta'], 21);
+        
+        // These hooks don't need to be on init and won't trigger translations
+        add_filter('content_save_pre', [$this, 'allow_html_for_business_cpt']);
+        add_action('restrict_manage_posts', [$this, 'add_taxonomy_filters']);
+        add_filter('manage_business_posts_columns', [$this, 'add_business_columns']);
+        add_action('manage_business_posts_custom_column', [$this, 'render_business_column'], 10, 2);
     }
 
     public function register_post_type_and_taxonomies() {
@@ -369,3 +372,5 @@ add_action('admin_head', function() {
     </style>
     <?php
 });
+
+// Class initialization is handled by gpd_init() in main plugin file

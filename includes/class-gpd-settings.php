@@ -64,23 +64,7 @@ class GPD_Settings {
                                 <a href="https://console.cloud.google.com/apis/library/places.googleapis.com" target="_blank"><?php esc_html_e( 'Enable API', 'google-places-directory' ); ?></a>
                             </p>
                         </td>
-                    </tr>
-                    <!-- New setting for photo limit -->
-                    <tr>
-                        <th scope="row"><label for="gpd_photo_limit"><?php esc_html_e( 'Photos to Import', 'google-places-directory' ); ?></label></th>
-                        <td>
-                            <select name="gpd_photo_limit" id="gpd_photo_limit">
-                                <option value="0" <?php selected( $photo_limit, 0 ); ?>><?php esc_html_e( 'None', 'google-places-directory' ); ?></option>
-                                <option value="1" <?php selected( $photo_limit, 1 ); ?>><?php esc_html_e( '1 (Featured Image Only)', 'google-places-directory' ); ?></option>
-                                <option value="3" <?php selected( $photo_limit, 3 ); ?>><?php esc_html_e( '3 (Default)', 'google-places-directory' ); ?></option>
-                                <option value="5" <?php selected( $photo_limit, 5 ); ?>><?php esc_html_e( '5', 'google-places-directory' ); ?></option>
-                                <option value="10" <?php selected( $photo_limit, 10 ); ?>><?php esc_html_e( '10 (Maximum)', 'google-places-directory' ); ?></option>
-                            </select>
-                            <p class="description">
-                                <?php esc_html_e( 'Maximum number of photos to import per business. The first photo will be set as the featured image.', 'google-places-directory' ); ?>
-                            </p>
-                        </td>
-                    </tr>
+                    </tr>                    <!-- Photo settings moved to Photo Management page -->
                 </table>
                 
                 <h2><?php esc_html_e( 'API Key Requirements', 'google-places-directory' ); ?></h2>
@@ -184,18 +168,8 @@ class GPD_Settings {
     public function save_settings() {
         if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_settings_action', 'gpd_save_settings_nonce' ) ) {
             wp_die( __( 'Permission denied', 'google-places-directory' ) );
-        }
-
-        if ( isset( $_POST['gpd_api_key'] ) ) {
+        }        if ( isset( $_POST['gpd_api_key'] ) ) {
             update_option( 'gpd_api_key', sanitize_text_field( wp_unslash( $_POST['gpd_api_key'] ) ) );
-        }
-
-        // Save photo limit setting
-        if ( isset( $_POST['gpd_photo_limit'] ) ) {
-            $photo_limit = intval( $_POST['gpd_photo_limit'] );
-            // Ensure it's within valid range (0-10)
-            $photo_limit = min( 10, max( 0, $photo_limit ) );
-            update_option( 'gpd_photo_limit', $photo_limit );
         }
 
         $redirect_url = add_query_arg(

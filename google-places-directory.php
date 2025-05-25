@@ -19,57 +19,76 @@ define( 'GPD_VERSION', '2.3.0' );
 define( 'GPD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GPD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-// Include core files
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-cpt.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-settings.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-importer.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-admin-ui.php';
-require_once GPD_PLUGIN_DIR . 'includes/class-gpd-shortcodes.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-docs.php';
-require_once plugin_dir_path(__FILE__) . 'includes/class-gpd-photo-shortcodes.php'; 
-
-// Only include photo manager if the extension plugin is not active
-if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
-    require_once GPD_PLUGIN_DIR . 'includes/class-gpd-photo-manager.php';
+/**
+ * Load a class file from the includes directory
+ */
+function gpd_load_class($class_name) {
+    $file = GPD_PLUGIN_DIR . 'includes/class-' . strtolower(str_replace('_', '-', $class_name)) . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
 }
 
-// Initialize the plugin
+/**
+ * Initialize the plugin's text domain for translations.
+ */
+function gpd_load_textdomain() {
+    load_plugin_textdomain( 'google-places-directory', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+}
+
+/**
+ * Initialize core plugin components after translations are loaded.
+ */
 function gpd_init() {
-    // Register post types and taxonomies
-    GPD_CPT::instance();
+    // Load core classes first
+    gpd_load_class('GPD_CPT');
+    gpd_load_class('GPD_Settings');
+    gpd_load_class('GPD_Importer');
+    gpd_load_class('GPD_Admin_UI');
+    gpd_load_class('GPD_Shortcodes');
+    gpd_load_class('GPD_Docs');
+    gpd_load_class('GPD_Photo_Shortcodes');
     
-    // Load settings
+    // Load photo manager only if extension plugin is not active
+    if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
+        gpd_load_class('GPD_Photo_Manager');
+    }
+
+    // Get CPT instance and initialize it
+    $cpt = GPD_CPT::instance();
+    $cpt->init();
+    
+    // Then initialize other plugin components
     GPD_Settings::instance();
-    
-    // Load importer
     GPD_Importer::instance();
-    
-    // Load admin UI for import page
     GPD_Admin_UI::instance();
-    
-    // Load shortcodes
     GPD_Shortcodes::instance();
     
     // Load photo manager only if extension plugin is not active
     if ( ! function_exists('gpdpm_is_active') || ! gpdpm_is_active() ) {
         GPD_Photo_Manager::instance();
     }
-    
-    // Load text domain
-    load_plugin_textdomain( 'google-places-directory', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+
+    // Check if we need to flush rewrite rules
+    if (get_option('gpd_flush_rewrite_rules')) {
+        flush_rewrite_rules();
+        delete_option('gpd_flush_rewrite_rules');
+    }
 }
-add_action( 'plugins_loaded', 'gpd_init' );
+
+// Load translations at init with priority 0 to ensure they're loaded before any plugin code
+add_action('init', 'gpd_load_textdomain', 0);
+
+// Initialize plugin components after translations are loaded
+add_action('init', 'gpd_init', 15);
 
 // Plugin activation hook
 register_activation_hook( __FILE__, 'gpd_activate' );
 
 // Plugin activation function
 function gpd_activate() {
-    // Make sure post types are registered for flushing
-    GPD_CPT::instance();
-    
-    // Flush rewrite rules
-    flush_rewrite_rules();
+    // Just flag that we need to flush rewrite rules
+    update_option('gpd_flush_rewrite_rules', true);
 }
 /**
  * Enqueue frontend template styles

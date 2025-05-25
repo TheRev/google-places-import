@@ -33,6 +33,9 @@ class GPD_Photo_Manager {
     // Add admin notices
     add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
     
+    // Handle photo settings form submission
+    add_action( 'admin_post_gpd_save_photo_settings', array( $this, 'save_photo_settings' ) );
+    
     // Add Ajax handlers
     add_action( 'wp_ajax_gpd_refresh_business_photos', array( $this, 'ajax_refresh_photos' ) );
     add_action( 'wp_ajax_gpd_get_businesses_without_photos', array( $this, 'ajax_get_businesses_without_photos' ) );
@@ -546,15 +549,47 @@ public function ajax_refresh_photos() {
 }
 
     /**
-     * Render the photo management page
+     * Save photo settings
      */
-    public function render_photo_management_page() {
+    public function save_photo_settings() {
+        if ( ! current_user_can( 'manage_options' ) || ! check_admin_referer( 'gpd_save_photo_settings', 'gpd_photo_settings_nonce' ) ) {
+            wp_die( __( 'Permission denied', 'google-places-directory' ) );
+        }
+
+        if ( isset( $_POST['gpd_photo_limit'] ) ) {
+            $photo_limit = intval( $_POST['gpd_photo_limit'] );
+            // Ensure it's within valid range (0-10)
+            $photo_limit = min( 10, max( 0, $photo_limit ) );
+            update_option( 'gpd_photo_limit', $photo_limit );
+        }
+
+        $redirect_url = add_query_arg(
+            array(
+                'post_type'       => 'business',
+                'page'            => 'gpd-photo-management',
+                'settings-updated'=> 'true',
+            ),
+            admin_url( 'edit.php' )
+        );
+
+        wp_redirect( $redirect_url );
+        exit;
+    }
+
+    /**
+     * Render the photo management page
+     */    public function render_photo_management_page() {
         // Get statistics
         $total_businesses = $this->count_businesses();
         $businesses_with_photos = $this->count_businesses_with_photos();
         $businesses_without_photos = $total_businesses - $businesses_with_photos;
         $total_photos = $this->count_total_photos();
         $photo_limit = (int) get_option( 'gpd_photo_limit', 3 );
+
+        // Show settings update message if needed
+        if ( isset( $_GET['settings-updated'] ) && $_GET['settings-updated'] === 'true' ) {
+            ?><div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Photo settings saved successfully.', 'google-places-directory' ); ?></p></div><?php
+        }
         
         ?>
         <div class="wrap gpd-photo-management">
@@ -582,14 +617,40 @@ public function ajax_refresh_photos() {
                 </div>
             </div>
             
-            <div class="gpd-photo-actions">
+            <div class="gpd-photo-actions">                <div class="gpd-action-card">
+                    <h3><?php esc_html_e( 'Photo Import Settings', 'google-places-directory' ); ?></h3>
+                    
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                        <?php wp_nonce_field( 'gpd_save_photo_settings', 'gpd_photo_settings_nonce' ); ?>
+                        <input type="hidden" name="action" value="gpd_save_photo_settings">
+                        
+                        <table class="form-table" role="presentation">
+                            <tr>
+                                <th scope="row"><label for="gpd_photo_limit"><?php esc_html_e( 'Photos to Import', 'google-places-directory' ); ?></label></th>
+                                <td>
+                                    <select name="gpd_photo_limit" id="gpd_photo_limit">
+                                        <option value="0" <?php selected( $photo_limit, 0 ); ?>><?php esc_html_e( 'None', 'google-places-directory' ); ?></option>
+                                        <option value="1" <?php selected( $photo_limit, 1 ); ?>><?php esc_html_e( '1 (Featured Image Only)', 'google-places-directory' ); ?></option>
+                                        <option value="3" <?php selected( $photo_limit, 3 ); ?>><?php esc_html_e( '3 (Default)', 'google-places-directory' ); ?></option>
+                                        <option value="5" <?php selected( $photo_limit, 5 ); ?>><?php esc_html_e( '5', 'google-places-directory' ); ?></option>
+                                        <option value="10" <?php selected( $photo_limit, 10 ); ?>><?php esc_html_e( '10 (Maximum)', 'google-places-directory' ); ?></option>
+                                    </select>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Maximum number of photos to import per business. The first photo will be set as the featured image.', 'google-places-directory' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        <?php submit_button( __( 'Save Settings', 'google-places-directory' ) ); ?>
+                    </form>
+                </div>
+
                 <div class="gpd-action-card">
                     <h3><?php esc_html_e( 'Batch Photo Operations', 'google-places-directory' ); ?></h3>
                     
                     <?php if ( $photo_limit <= 0 ) : ?>
                         <div class="notice notice-warning inline">
-                            <p><?php esc_html_e( 'Photo importing is currently disabled in settings. Please set a photo limit greater than 0 to enable photo importing.', 'google-places-directory' ); ?></p>
-                            <p><a href="<?php echo esc_url( admin_url( 'edit.php?post_type=business&page=gpd-settings' ) ); ?>" class="button"><?php esc_html_e( 'Go to Settings', 'google-places-directory' ); ?></a></p>
+                            <p><?php esc_html_e( 'Photo importing is currently disabled. Please set a photo limit greater than 0 above to enable photo importing.', 'google-places-directory' ); ?></p>
                         </div>
                     <?php else : ?>
                         <p><?php esc_html_e( 'These actions allow you to refresh photos for businesses in bulk.', 'google-places-directory' ); ?></p>
@@ -1033,22 +1094,30 @@ public function ajax_refresh_photos() {
      * Count total number of photos
      *
      * @return int Number of photos
-     */
-    private function count_total_photos() {
-        $query = new WP_Query( array(
-            'post_type' => 'attachment',
+     */    private function count_total_photos() {
+        // First get all business posts with photo references
+        $businesses = get_posts(array(
+            'post_type' => 'business',
             'posts_per_page' => -1,
-            'fields' => 'ids',
-            'no_found_rows' => true,
             'meta_query' => array(
                 array(
-                    'key' => '_gpd_photo_reference',
+                    'key' => '_gpd_photo_references',
                     'compare' => 'EXISTS',
                 ),
             ),
-        ) );
+        ));
         
-        return $query->post_count;
+        $total_photos = 0;
+        
+        // Count total photos by summing up the photo references arrays
+        foreach ($businesses as $business) {
+            $photo_refs = get_post_meta($business->ID, '_gpd_photo_references', true);
+            if (is_array($photo_refs)) {
+                $total_photos += count($photo_refs);
+            }
+        }
+        
+        return $total_photos;
     }
 
     /**
