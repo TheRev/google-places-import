@@ -25,6 +25,7 @@ class GPD_Shortcodes {
         // Register shortcodes
         add_shortcode('gpd-business-search', array($this, 'business_search_shortcode'));
         add_shortcode('gpd-business-info', array($this, 'business_info_shortcode'));
+        add_shortcode('gpd-business-map', array($this, 'business_map_shortcode'));
         add_shortcode('gpd-meta', array($this, 'meta_shortcode'));
         
         // Enqueue scripts and styles        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
@@ -103,10 +104,8 @@ class GPD_Shortcodes {
             array('jquery', 'gpd-leaflet-maps'),
             file_exists($js_file) ? filemtime($js_file) : GPD_VERSION,
             true
-        );
-        
-        // Localize script with AJAX data for Leaflet maps
-        wp_localize_script('gpd-leaflet-maps', 'gpdLeafletAjax', array(
+        );        // Localize script with AJAX data for frontend functionality
+        wp_localize_script('gpd-frontend', 'gpdFrontendVars', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('gpd_leaflet_nonce')
         ));

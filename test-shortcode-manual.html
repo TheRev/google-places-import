@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPD Business Map Shortcode Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        .shortcode-example {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #0073aa;
+        }
+        .note {
+            background: #fff3cd;
+            padding: 10px;
+            border: 1px solid #ffeaa7;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Google Places Directory - Business Map Shortcode Test</h1>
+    
+    <div class="note">
+        <strong>Note:</strong> This is a test page for the <code>[gpd-business-map]</code> shortcode fix. 
+        To properly test this, copy the shortcode examples below into a WordPress page or post.
+    </div>
+
+    <div class="test-section">
+        <h2>Test 1: Basic Map</h2>
+        <p>This should display a map with all businesses that have coordinates:</p>
+        <div class="shortcode-example">
+            <code>[gpd-business-map]</code>
+        </div>
+        <p><strong>Expected result:</strong> Interactive map showing business markers with default height (400px) and zoom level (14).</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Custom Height and Zoom</h2>
+        <p>This should display a taller map with different zoom level:</p>
+        <div class="shortcode-example">
+            <code>[gpd-business-map height="500px" zoom="10"]</code>
+        </div>
+        <p><strong>Expected result:</strong> Map with 500px height and zoom level 10.</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Category Filter</h2>
+        <p>This should display only businesses from a specific category:</p>
+        <div class="shortcode-example">
+            <code>[gpd-business-map category="restaurant" height="400px"]</code>
+        </div>
+        <p><strong>Expected result:</strong> Map showing only restaurants (if any exist with that category).</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Single Business Map</h2>
+        <p>This should display a map focused on a specific business:</p>
+        <div class="shortcode-example">
+            <code>[gpd-business-map id="123" zoom="16"]</code>
+        </div>
+        <p><strong>Expected result:</strong> Map centered on business with ID 123 (replace with actual business ID).</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 5: No Clustering</h2>
+        <p>This should disable marker clustering:</p>
+        <div class="shortcode-example">
+            <code>[gpd-business-map clustering="false"]</code>
+        </div>
+        <p><strong>Expected result:</strong> Map with individual markers instead of clusters.</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Troubleshooting</h2>
+        <h3>If the shortcode doesn't work:</h3>
+        <ol>
+            <li><strong>Check registration:</strong> Verify that the shortcode is registered in <code>class-gpd-shortcodes.php</code> line ~29</li>
+            <li><strong>Check businesses:</strong> Ensure you have businesses imported with coordinate data (_gpd_latitude and _gpd_longitude)</li>
+            <li><strong>Check assets:</strong> Verify Leaflet CSS/JS files are loading properly</li>
+            <li><strong>Browser console:</strong> Check for JavaScript errors in the browser developer tools</li>
+            <li><strong>WordPress debug:</strong> Enable WP_DEBUG to see any PHP errors</li>
+        </ol>
+        
+        <h3>Error Messages:</h3>
+        <ul>
+            <li><em>"No businesses with location data found"</em> - No businesses have latitude/longitude data</li>
+            <li><em>"Leaflet map initialization function not found"</em> - JavaScript files not loading</li>
+            <li>Blank output - Shortcode not registered properly</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('GPD Business Map Test Page Loaded');
+        console.log('To test the shortcode, copy the examples above into a WordPress page.');
+    </script>
+</body>
+</html>
