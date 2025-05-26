@@ -194,7 +194,7 @@ class GPD_Docs {
             <ol>
                 <li>
                     <strong><?php _e('Configure your Google API key', 'google-places-directory'); ?></strong>
-                    <p><?php _e('Start by obtaining a Google Places API key from the <a href="https://console.cloud.google.com/apis/dashboard" target="_blank">Google Cloud Console</a>. Enable both "Places API" and "Maps JavaScript API" for full functionality.', 'google-places-directory'); ?></p>
+                    <p><?php _e('Start by obtaining a Google Places API key from the <a href="https://console.cloud.google.com/apis/dashboard" target="_blank">Google Cloud Console</a>. Enable "Places API" for importing business data. Maps are displayed using Leaflet (no additional Google Maps API required).', 'google-places-directory'); ?></p>
                     <p><?php _e('Once you have your API key, enter it in the plugin\'s Settings page (Business → Settings).', 'google-places-directory'); ?></p>
                 </li>
                 <li>
@@ -253,7 +253,7 @@ class GPD_Docs {
                     </tr>
                     <tr>
                         <td><code>[gpd-business-map]</code></td>
-                        <td><?php _e('Displays businesses on an interactive Google Map', 'google-places-directory'); ?></td>
+                        <td><?php _e('Displays businesses on an interactive map using Leaflet', 'google-places-directory'); ?></td>
                         <td><code>height</code>, <code>zoom</code>, <code>category</code>, <code>region</code></td>
                         <td><code>[gpd-business-map height="450" zoom="12"]</code></td>
                     </tr>
@@ -464,7 +464,7 @@ class GPD_Docs {
                 <tbody>
                     <tr>
                         <td><?php _e('API Key', 'google-places-directory'); ?></td>
-                        <td><?php _e('Your Google Cloud API key with Places API and Maps JavaScript API enabled', 'google-places-directory'); ?></td>
+                        <td><?php _e('Your Google Cloud API key with Places API enabled', 'google-places-directory'); ?></td>
                         <td><?php _e('A key with HTTP referrer restrictions', 'google-places-directory'); ?></td>
                     </tr>
                     <tr>
@@ -528,7 +528,7 @@ class GPD_Docs {
                 <li><?php _e('<strong>Results Per Page:</strong> Number of businesses to show in search results', 'google-places-directory'); ?></li>
                 <li><?php _e('<strong>Image Size:</strong> Default size for business photos (small, medium, large)', 'google-places-directory'); ?></li>
                 <li><?php _e('<strong>Map Height:</strong> Default height for map displays in pixels', 'google-places-directory'); ?></li>
-                <li><?php _e('<strong>Map Style:</strong> Custom JSON styling for your Google Maps', 'google-places-directory'); ?></li>
+                <li><?php _e('<strong>Map Style:</strong> Custom CSS styling for your Leaflet maps', 'google-places-directory'); ?></li>
             </ul>
             
             <div class="gpd-notice gpd-notice-info">

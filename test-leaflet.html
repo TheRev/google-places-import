@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Map Integration Test</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    
+    <!-- GPD Leaflet CSS -->
+    <link rel="stylesheet" href="assets/css/gpd-leaflet-maps.css" />
+    
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-container { max-width: 800px; margin: 0 auto; }
+        .test-section { margin-bottom: 40px; }
+        h2 { color: #333; border-bottom: 2px solid #0073aa; padding-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Leaflet Map Integration Test</h1>
+        
+        <div class="test-section">
+            <h2>Test 1: Basic Map Initialization</h2>
+            <div class="gpd-map-container">
+                <div id="test-map-1" class="gpd-leaflet-map"></div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Test 2: Map with Business Markers</h2>
+            <div class="gpd-map-container">
+                <div id="test-map-2" class="gpd-leaflet-map"></div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Test 3: Map with Clustering</h2>
+            <div class="gpd-map-container">
+                <div id="test-map-3" class="gpd-leaflet-map"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    
+    <!-- GPD Leaflet JS -->
+    <script src="assets/js/gpd-leaflet-maps.js"></script>
+    
+    <script>
+        // Mock AJAX configuration
+        window.gpdLeafletAjax = {
+            url: '#',
+            nonce: 'test-nonce'
+        };
+        
+        // Sample business data
+        const sampleBusinesses = [
+            {
+                id: 1,
+                title: "Coffee Shop Central",
+                lat: 40.7128,
+                lng: -74.0060,
+                url: "#",
+                address: "123 Main St, New York, NY",
+                thumbnail: "https://via.placeholder.com/300x200"
+            },
+            {
+                id: 2,
+                title: "Pizza Palace",
+                lat: 40.7589,
+                lng: -73.9851,
+                url: "#",
+                address: "456 Broadway, New York, NY",
+                thumbnail: "https://via.placeholder.com/300x200"
+            },
+            {
+                id: 3,
+                title: "Burger Barn",
+                lat: 40.7505,
+                lng: -73.9934,
+                url: "#",
+                address: "789 5th Ave, New York, NY",
+                thumbnail: "https://via.placeholder.com/300x200"
+            }
+        ];
+        
+        // Test different map configurations
+        document.addEventListener('DOMContentLoaded', function() {
+            // Test 1: Basic map
+            if (typeof gpdInitMap === 'function') {
+                gpdInitMap('test-map-1', {
+                    center: { lat: 40.7128, lng: -74.0060 },
+                    zoom: 12
+                });
+                
+                // Test 2: Map with businesses
+                gpdInitMap('test-map-2', {
+                    center: { lat: 40.7128, lng: -74.0060 },
+                    zoom: 13,
+                    businesses: sampleBusinesses.slice(0, 1)
+                });
+                
+                // Test 3: Map with clustering
+                gpdInitMap('test-map-3', {
+                    center: { lat: 40.7128, lng: -74.0060 },
+                    zoom: 12,
+                    clustering: true,
+                    businesses: sampleBusinesses
+                });
+                
+                console.log('✅ All Leaflet maps initialized successfully!');
+            } else {
+                console.error('❌ gpdInitMap function not found!');
+            }
+        });
+    </script>
+</body>
+</html>

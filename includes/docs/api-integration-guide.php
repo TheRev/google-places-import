@@ -111,9 +111,7 @@ if (!defined('ABSPATH')) {
                     <li><?php _e('Select your project in the Google Cloud Console', 'google-places-directory'); ?></li>
                     <li><?php _e('Navigate to "APIs & Services" → "Library"', 'google-places-directory'); ?></li>
                     <li><?php _e('Search for and enable the following APIs:', 'google-places-directory'); ?>
-                        <ul>
-                            <li><?php _e('<strong>Places API</strong> - Required for business data', 'google-places-directory'); ?></li>
-                            <li><?php _e('<strong>Maps JavaScript API</strong> - Required for maps display', 'google-places-directory'); ?></li>
+                        <ul>                            <li><?php _e('<strong>Places API</strong> - Required for business data', 'google-places-directory'); ?></li>
                             <li><?php _e('<strong>Geocoding API</strong> - Required for location search', 'google-places-directory'); ?></li>
                             <li><?php _e('<strong>Places API (New)</strong> - Latest version with enhanced features', 'google-places-directory'); ?></li>
                             <li><?php _e('Geocoding API (optional for address search)', 'google-places-directory'); ?></li>

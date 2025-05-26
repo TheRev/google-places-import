@@ -33,15 +33,7 @@ function gpd_load_class($class_name) {
     // Also load any initialization file if it exists
     $init_file = $includes_dir . 'init-' . strtolower(str_replace('_', '-', $class_name)) . '.php';
     
-    // Log the attempted file path and whether it exists for debugging
-    $debug_info = array(
-        'Plugin Dir' => GPD_PLUGIN_DIR,
-        'Includes Dir' => $includes_dir,
-        'Full Path' => $file,
-        'File Exists' => file_exists($file) ? 'Yes' : 'No',
-        'Is Readable' => is_readable($file) ? 'Yes' : 'No'
-    );
-    error_log('Google Places Directory Debug - Loading class ' . $class_name . ': ' . print_r($debug_info, true));    $class_loaded = false;
+    $class_loaded = false;
     
     // Load the class file
     if (file_exists($file) && is_readable($file)) {
@@ -66,7 +58,8 @@ function gpd_load_class($class_name) {
 /**
  * Initialize core plugin components after translations are loaded.
  */
-function gpd_init() {    // Load and initialize CPT first as it sets up core functionality
+function gpd_init() {
+    // Load and initialize CPT first as it sets up core functionality
     gpd_load_class('GPD_CPT');
     if (class_exists('GPD_CPT')) {
         GPD_CPT::instance();
@@ -91,14 +84,15 @@ function gpd_init() {    // Load and initialize CPT first as it sets up core fun
         'GPD_Docs',
         'GPD_Photo_Shortcodes',
         'GPD_Photo_Manager'
-    );
-
-    foreach ($additional_classes as $class) {
+    );    foreach ($additional_classes as $class) {
         gpd_load_class($class);
         if (class_exists($class)) {
             $class::instance();
         }
     }
+
+    // Load GPD_Leaflet_Ajax (self-initializes, no instance() method needed)
+    gpd_load_class('GPD_Leaflet_Ajax');
 
     // Enqueue the usage graph JavaScript if we're on the settings page
     add_action('admin_enqueue_scripts', function($hook) {
@@ -129,6 +123,9 @@ add_action('init', 'gpd_init', 5); // Higher priority than textdomain loading (i
 // Check if we just activated the plugin and need to do additional setup
 add_action('init', 'gpd_check_activation_tasks', 30);
 
+// Check for rewrite rule flush after post types are registered
+add_action('init', 'gpd_check_flush_rewrite_rules', 20);
+
 /**
  * Check for any post-activation tasks that need to be run after translations are loaded
  */
@@ -146,17 +143,21 @@ function gpd_check_activation_tasks() {
     }
 }
 
-// Plugin activation hook
-register_activation_hook( __FILE__, 'gpd_activate' );
-
-// Plugin activation function
-function gpd_activate() {
-    // Just flag that we need to flush rewrite rules
-    update_option('gpd_flush_rewrite_rules', true);
+/**
+ * Check if we need to flush rewrite rules after post types are registered
+ */
+function gpd_check_flush_rewrite_rules() {
+    if (get_option('gpd_flush_rewrite_rules')) {
+        // Delete the flag
+        delete_option('gpd_flush_rewrite_rules');
+        
+        // Flush rewrite rules to ensure business URLs work
+        flush_rewrite_rules();
+    }
 }
 
-// Add activation hook for initial setup
-register_activation_hook(__FILE__, 'gpd_activate_plugin');
+// Plugin activation hook
+register_activation_hook( __FILE__, 'gpd_activate_plugin' );
 
 function gpd_activate_plugin() {
     // Load translation domains during activation to prevent JIT loading errors
@@ -164,20 +165,21 @@ function gpd_activate_plugin() {
     load_plugin_textdomain('google-places-directory', false, $domain_path);
     load_plugin_textdomain('gpd-advanced-features', false, $domain_path);
     
-    // Very simplified post type registration for activation
-    $args = array();
-    $args['public'] = true;
-    $args['has_archive'] = true;
-    $args['supports'] = array('title', 'editor', 'thumbnail', 'excerpt');
-    $args['show_in_rest'] = true;
-    
-    // Register the post type
+    // Register the business post type temporarily for activation
+    $args = array(
+        'public' => true,
+        'has_archive' => false,
+        'supports' => array('title', 'editor', 'thumbnail', 'custom-fields'),
+        'show_in_rest' => true,
+        'rewrite' => array('slug' => 'business'),
+    );
     register_post_type('business', $args);
     
-    // Clear permalinks
+    // Clear permalinks immediately
     flush_rewrite_rules();
     
-    // Store flag for initialization of other components on next page load
+    // Set flags for post-activation tasks
+    update_option('gpd_flush_rewrite_rules', true);
     update_option('gpd_just_activated', true);
 }
 
@@ -191,7 +193,7 @@ function gpd_enqueue_template_styles() {
             'gpd-frontend-template',
             plugin_dir_url(__FILE__) . 'assets/css/frontend-template.css',
             array('gpd-frontend'), // Make it dependent on your main frontend CSS
-            '1.0.0'
+            GPD_VERSION
         );
     }
 }

@@ -27,15 +27,66 @@ class GPD_Shortcodes {
         add_shortcode('gpd-business-info', array($this, 'business_info_shortcode'));
         add_shortcode('gpd-meta', array($this, 'meta_shortcode'));
         
-        // Enqueue scripts and styles
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
+        // Enqueue scripts and styles        add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
     }
 
     /**
      * Enqueue required assets for shortcodes
-     */    public function enqueue_assets() {
+     */
+    public function enqueue_assets() {
         $css_file = plugin_dir_path(__FILE__) . '../assets/css/gpd-frontend.css';
         $js_file = plugin_dir_path(__FILE__) . '../assets/js/gpd-frontend.js';
+        $leaflet_css_file = plugin_dir_path(__FILE__) . '../assets/css/gpd-leaflet-maps.css';
+        $leaflet_js_file = plugin_dir_path(__FILE__) . '../assets/js/gpd-leaflet-maps.js';
+        
+        // Register Leaflet core library
+        wp_register_style(
+            'leaflet',
+            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+            array(),
+            '1.9.4'
+        );
+        
+        wp_register_script(
+            'leaflet',
+            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+            array(),
+            '1.9.4',
+            true
+        );
+        
+        // Register Leaflet Marker Cluster plugin
+        wp_register_style(
+            'leaflet-markercluster',
+            'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css',
+            array('leaflet'),
+            '1.5.3'
+        );
+        
+        wp_register_script(
+            'leaflet-markercluster',
+            'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js',
+            array('leaflet'),
+            '1.5.3',
+            true
+        );
+        
+        // Register our Leaflet styles
+        wp_register_style(
+            'gpd-leaflet-maps',
+            plugin_dir_url(__FILE__) . '../assets/css/gpd-leaflet-maps.css',
+            array('leaflet', 'leaflet-markercluster'),
+            file_exists($leaflet_css_file) ? filemtime($leaflet_css_file) : GPD_VERSION
+        );
+        
+        // Register our Leaflet script
+        wp_register_script(
+            'gpd-leaflet-maps',
+            plugin_dir_url(__FILE__) . '../assets/js/gpd-leaflet-maps.js',
+            array('jquery', 'leaflet', 'leaflet-markercluster'),
+            file_exists($leaflet_js_file) ? filemtime($leaflet_js_file) : GPD_VERSION,
+            true
+        );
         
         // Register styles
         wp_register_style(
@@ -45,14 +96,20 @@ class GPD_Shortcodes {
             file_exists($css_file) ? filemtime($css_file) : GPD_VERSION
         );
         
-        // Register scripts
+        // Register scripts with Leaflet dependency
         wp_register_script(
             'gpd-frontend',
             plugin_dir_url(__FILE__) . '../assets/js/gpd-frontend.js',
-            array('jquery'),
+            array('jquery', 'gpd-leaflet-maps'),
             file_exists($js_file) ? filemtime($js_file) : GPD_VERSION,
             true
         );
+        
+        // Localize script with AJAX data for Leaflet maps
+        wp_localize_script('gpd-leaflet-maps', 'gpdLeafletAjax', array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('gpd_leaflet_nonce')
+        ));
     }
 
     /**
@@ -331,11 +388,12 @@ case 'html':
      * 
      * @param array $atts Shortcode attributes
      * @return string HTML output
-     */
-    public function business_map_shortcode($atts) {
+     */    public function business_map_shortcode($atts) {
         // Enqueue required assets
         wp_enqueue_style('gpd-frontend');
+        wp_enqueue_style('gpd-leaflet-maps');
         wp_enqueue_script('gpd-frontend');
+        wp_enqueue_script('gpd-leaflet-maps');
         
         // Extract attributes and set defaults
         $atts = shortcode_atts(array(
@@ -462,11 +520,12 @@ case 'html':
         
         // Start output buffering
         ob_start();
-        
-        // Output map container
+          // Output map container
         ?>
         <div class="<?php echo esc_attr(implode(' ', $css_classes)); ?>">
-            <div id="<?php echo esc_attr($map_id); ?>" class="gpd-map-canvas" style="height:<?php echo esc_attr($atts['height']); ?>;"></div>
+            <div class="gpd-map-container">
+                <div id="<?php echo esc_attr($map_id); ?>" class="gpd-leaflet-map" style="height:<?php echo esc_attr($atts['height']); ?>;"></div>
+            </div>
         </div>
         
         <script type="text/javascript">
@@ -482,9 +541,8 @@ case 'html':
                         zoom: <?php echo intval($atts['zoom']); ?>,
                         clustering: <?php echo $atts['clustering'] ? 'true' : 'false'; ?>,
                         businesses: <?php echo json_encode($businesses); ?>
-                    });
-                } else {
-                    console.error('Google Maps initialization function not found');
+                    });                } else {
+                    console.error('Leaflet map initialization function not found');
                 }
             });
         })();
