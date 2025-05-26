@@ -810,21 +810,30 @@ class GPD_Admin_UI {
             }
         </style>
         <?php
-    }
-
-    /**
+    }    /**
      * Enqueue admin scripts and styles
      * 
      * @param string $hook The current admin page hook
-     */
-    public function enqueue_admin_scripts($hook) {
-        // Only load on our import page
+     */    public function enqueue_admin_scripts($hook) {
+        // Load admin styles on business post type pages
+        if (strpos($hook, 'business') !== false || $hook === 'edit.php' || $hook === 'post.php' || $hook === 'post-new.php') {
+            $admin_css_file = plugin_dir_path(__FILE__) . '../assets/css/admin-style.css';
+            wp_enqueue_style(
+                'gpd-admin',
+                plugin_dir_url(__FILE__) . '../assets/css/admin-style.css',
+                array(),
+                file_exists($admin_css_file) ? filemtime($admin_css_file) : GPD_VERSION
+            );
+        }
+        
+        // Only load admin JS on our import page
         if ('business_page_gpd-import' === $hook) {
+            $admin_js_file = plugin_dir_path(__FILE__) . '../assets/js/admin.js';
             wp_enqueue_script(
                 'gpd-admin',
                 plugin_dir_url(__FILE__) . '../assets/js/admin.js',
                 array('jquery'),
-                GPD_VERSION,
+                file_exists($admin_js_file) ? filemtime($admin_js_file) : GPD_VERSION,
                 true
             );
             

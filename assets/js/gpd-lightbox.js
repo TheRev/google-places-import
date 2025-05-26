@@ -1,6 +1,6 @@
 /**
  * Google Places Directory - Lightbox Script
- * Version: 2.5.1
+ * Version: 2.3.0
  * Date: 2025-05-22
  */
 (function($) {

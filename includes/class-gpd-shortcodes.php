@@ -2,11 +2,10 @@
 /**
  * Class GPD_Shortcodes
  *
- * Handles shortcodes for the Google Places Directory plugin.
- * Photo-related shortcodes have been moved to class-gpd-photo-shortcodes.php
+ * Handles shortcodes for the Google Places Directory plugin. * Photo-related shortcodes have been moved to class-gpd-photo-shortcodes.php
  * 
- * @since 2.5.0
- * @modified 2.5.1
+ * @since 2.3.0
+ * @modified 2.3.0
  */
 
 if (!defined('ABSPATH')) {
@@ -34,14 +33,16 @@ class GPD_Shortcodes {
 
     /**
      * Enqueue required assets for shortcodes
-     */
-    public function enqueue_assets() {
+     */    public function enqueue_assets() {
+        $css_file = plugin_dir_path(__FILE__) . '../assets/css/gpd-frontend.css';
+        $js_file = plugin_dir_path(__FILE__) . '../assets/js/gpd-frontend.js';
+        
         // Register styles
         wp_register_style(
             'gpd-frontend', 
             plugin_dir_url(__FILE__) . '../assets/css/gpd-frontend.css',
             array(),
-            '2.5.0'
+            file_exists($css_file) ? filemtime($css_file) : GPD_VERSION
         );
         
         // Register scripts
@@ -49,7 +50,7 @@ class GPD_Shortcodes {
             'gpd-frontend',
             plugin_dir_url(__FILE__) . '../assets/js/gpd-frontend.js',
             array('jquery'),
-            '2.5.0',
+            file_exists($js_file) ? filemtime($js_file) : GPD_VERSION,
             true
         );
     }
