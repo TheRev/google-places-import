@@ -74,9 +74,7 @@ function gpd_init() {    // Load and initialize CPT first as it sets up core fun
         if (class_exists($class)) {
             $class::instance();
         }
-    }
-    
-    // Load remaining core classes
+    }    // Load remaining core classes
     $additional_classes = array(
         'GPD_Importer',
         'GPD_Admin_UI',

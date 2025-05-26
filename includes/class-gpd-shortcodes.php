@@ -22,14 +22,11 @@ class GPD_Shortcodes {
             self::$instance->init_hooks();
         }
         return self::$instance;
-    }
-
-    private function init_hooks() {
+    }    private function init_hooks() {
         // Register shortcodes
         add_shortcode('gpd-business-search', array($this, 'business_search_shortcode'));
-        add_shortcode('gpd-business-map', array($this, 'business_map_shortcode'));
         add_shortcode('gpd-business-info', array($this, 'business_info_shortcode'));
-        add_shortcode('gpd-meta', array($this, 'meta_shortcode')); // Added new shortcode
+        add_shortcode('gpd-meta', array($this, 'meta_shortcode'));
         
         // Enqueue scripts and styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
@@ -506,10 +503,12 @@ case 'html':
     public function business_info_shortcode($atts) {
         // Enqueue required assets
         wp_enqueue_style('gpd-frontend');
-        
-        // Extract attributes and set defaults
+          // Extract attributes and set defaults
         $atts = shortcode_atts(array(
             'id' => 0,                   // Business ID (defaults to current post)
+            'layout' => 'standard',      // Layout style (standard, compact, detailed)
+            'fields' => 'all',           // Fields to display
+            'show_photos' => 'false',    // Include photo gallery
             'show_name' => 'true',       // Show business name
             'show_hours' => 'true',      // Show business hours
             'show_rating' => 'true',     // Show rating

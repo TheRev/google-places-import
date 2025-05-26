@@ -540,33 +540,38 @@ class GPD_Docs {
     }
       /**
      * Render API documentation
-     */
-    private function render_api_docs() {
+     */    private function render_api_docs() {
         $data = $this->get_api_usage_data();
         $costs = $this->calculate_api_costs($data['daily_counts']);
         $api_usage = GPD_API_Usage::instance();
 
-        ?>
-        <div class="gpd-docs-section">
-            <h2><?php esc_html_e('Google Places API Integration Guide', 'google-places-directory'); ?></h2>
-            
-            <h3><?php esc_html_e('Setting Up Your Google API Key', 'google-places-directory'); ?></h3>
-            <p><?php _e('To use Google Places Directory, you need to obtain an API key from Google Cloud Platform. Follow these steps:', 'google-places-directory'); ?></p>
-            
-            <ol>
-                <li>
-                    <strong><?php _e('Create a Google Cloud Project', 'google-places-directory'); ?></strong>
-                    <p><?php _e('Visit the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> and create a new project (or select an existing one).', 'google-places-directory'); ?></p>
-                </li>
-                <li>
-                    <strong><?php _e('Enable Required APIs', 'google-places-directory'); ?></strong>
-                    <p><?php _e('In your Google Cloud project, go to "APIs & Services" → "Library" and enable the following APIs:', 'google-places-directory'); ?></p>
-                    <ul>
-                        <li><?php _e('<strong>Places API</strong> - Required for business search and details', 'google-places-directory'); ?></li>
-                        <li><?php _e('<strong>Maps JavaScript API</strong> - Required for maps and location features', 'google-places-directory'); ?></li>
-                        <li><?php _e('<strong>Geocoding API</strong> - (Optional) For address search features', 'google-places-directory'); ?></li>
-                    </ul>
-                </li>
+        // Load the comprehensive API integration guide
+        $api_guide_file = GPD_PLUGIN_DIR . 'includes/docs/api-integration-guide.php';
+        if (file_exists($api_guide_file)) {
+            include $api_guide_file;
+        } else {
+            // Fallback if the file doesn't exist
+            ?>
+            <div class="gpd-docs-section">
+                <h2><?php esc_html_e('Google Places API Integration Guide', 'google-places-directory'); ?></h2>
+                
+                <h3><?php esc_html_e('Setting Up Your Google API Key', 'google-places-directory'); ?></h3>
+                <p><?php _e('To use Google Places Directory, you need to obtain an API key from Google Cloud Platform. Follow these steps:', 'google-places-directory'); ?></p>
+                
+                <ol>
+                    <li>
+                        <strong><?php _e('Create a Google Cloud Project', 'google-places-directory'); ?></strong>
+                        <p><?php _e('Visit the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> and create a new project (or select an existing one).', 'google-places-directory'); ?></p>
+                    </li>
+                    <li>
+                        <strong><?php _e('Enable Required APIs', 'google-places-directory'); ?></strong>
+                        <p><?php _e('In your Google Cloud project, go to "APIs & Services" → "Library" and enable the following APIs:', 'google-places-directory'); ?></p>
+                        <ul>
+                            <li><?php _e('Places API - Required for business search and details', 'google-places-directory'); ?></li>
+                            <li><?php _e('Maps JavaScript API - Required for maps and location features', 'google-places-directory'); ?></li>
+                            <li><?php _e('Geocoding API - (Optional) For address search features', 'google-places-directory'); ?></li>
+                        </ul>
+                    </li>
                 <li>
                     <strong><?php _e('Create API Key', 'google-places-directory'); ?></strong>
                     <p><?php _e('Go to "APIs & Services" → "Credentials" and click "Create Credentials" → "API Key".', 'google-places-directory'); ?></p>
