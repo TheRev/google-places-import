@@ -30,6 +30,9 @@ function gpd_load_class($class_name) {
     $includes_dir = rtrim(GPD_PLUGIN_DIR, '/\\') . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR;
     $file = $includes_dir . 'class-' . strtolower(str_replace('_', '-', $class_name)) . '.php';
     
+    // Also load any initialization file if it exists
+    $init_file = $includes_dir . 'init-' . strtolower(str_replace('_', '-', $class_name)) . '.php';
+    
     // Log the attempted file path and whether it exists for debugging
     $debug_info = array(
         'Plugin Dir' => GPD_PLUGIN_DIR,
@@ -38,20 +41,26 @@ function gpd_load_class($class_name) {
         'File Exists' => file_exists($file) ? 'Yes' : 'No',
         'Is Readable' => is_readable($file) ? 'Yes' : 'No'
     );
-    error_log('Google Places Directory Debug - Loading class ' . $class_name . ': ' . print_r($debug_info, true));
-
+    error_log('Google Places Directory Debug - Loading class ' . $class_name . ': ' . print_r($debug_info, true));    $class_loaded = false;
+    
+    // Load the class file
     if (file_exists($file) && is_readable($file)) {
         require_once $file;
         if (class_exists($class_name)) {
-            return true;
+            $class_loaded = true;
         } else {
             error_log("Google Places Directory: Class {$class_name} not found in file: {$file}");
-            return false;
         }
     } else {
         error_log("Google Places Directory: Class file not found or not readable: {$file}");
-        return false;
     }
+
+    // Load the initialization file if it exists
+    if (file_exists($init_file) && is_readable($init_file)) {
+        require_once $init_file;
+    }
+    
+    return $class_loaded;
 }
 
 /**

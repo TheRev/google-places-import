@@ -183,10 +183,9 @@ if (!defined('ABSPATH')) {
                 <li><?php _e('<strong>Dynamic Updates:</strong> Information displayed is automatically updated when the business data is refreshed from Google Places API.', 'google-places-directory'); ?></li>
             </ul>
         </div>
-    </div>    <!-- Photos Shortcode -->
-    <div class="shortcode-section">
+    </div>    <!-- Photos Shortcode -->    <div class="shortcode-section">
         <h3 id="gpd-photos">[gpd-photos]</h3>
-        <p class="shortcode-description"><?php _e('Displays photo gallery for a business with various layout options. This shortcode allows you to showcase high-quality photos from Google Places in responsive, interactive galleries that adapt to any theme.', 'google-places-directory'); ?></p>
+        <p class="shortcode-description"><?php _e('Displays photo gallery for a business with various layout options. This shortcode allows you to showcase high-quality photos in responsive, interactive galleries that adapt to any theme.', 'google-places-directory'); ?></p>
         
         <h4><?php esc_html_e('Parameters', 'google-places-directory'); ?></h4>
         <table class="gpd-docs-table">
@@ -206,60 +205,93 @@ if (!defined('ABSPATH')) {
                     <td><?php _e('Any valid business ID', 'google-places-directory'); ?></td>
                 </tr>
                 <tr>
-                    <td><code>count</code></td>
-                    <td><?php _e('Number of photos to display', 'google-places-directory'); ?></td>
-                    <td><code>9</code></td>
-                    <td><?php _e('Any number', 'google-places-directory'); ?></td>
-                </tr>
-                <tr>
-                    <td><code>size</code></td>
-                    <td><?php _e('Size of the photos', 'google-places-directory'); ?></td>
-                    <td><code>medium</code></td>
-                    <td><code>small</code>, <code>medium</code>, <code>large</code>, <code>original</code></td>
-                </tr>
-                <tr>
                     <td><code>layout</code></td>
-                    <td><?php _e('Gallery layout style', 'google-places-directory'); ?></td>
+                    <td><?php _e('Gallery layout style. Each layout has unique features for different presentation needs.', 'google-places-directory'); ?></td>
                     <td><code>grid</code></td>
-                    <td><code>grid</code>, <code>masonry</code>, <code>carousel</code>, <code>column</code></td>
-                </tr>
-                <tr>
-                    <td><code>lightbox</code></td>
-                    <td><?php _e('Enable lightbox for photo viewing', 'google-places-directory'); ?></td>
-                    <td><code>true</code></td>
-                    <td><code>true</code>, <code>false</code></td>
+                    <td><code>grid</code> (uniform grid), <code>masonry</code> (Pinterest-style), <code>carousel</code> (slideshow), <code>column</code> (vertical)</td>
                 </tr>
                 <tr>
                     <td><code>columns</code></td>
-                    <td><?php _e('Number of columns in grid/masonry layout', 'google-places-directory'); ?></td>
+                    <td><?php _e('Number of columns for grid/masonry layouts. Only applies to grid and masonry layouts.', 'google-places-directory'); ?></td>
                     <td><code>3</code></td>
                     <td><?php _e('1-6', 'google-places-directory'); ?></td>
                 </tr>
                 <tr>
-                    <td><code>caption</code></td>
-                    <td><?php _e('Show photo captions', 'google-places-directory'); ?></td>
+                    <td><code>limit</code></td>
+                    <td><?php _e('Maximum number of photos to display (0 = show all)', 'google-places-directory'); ?></td>
+                    <td><code>0</code></td>
+                    <td><?php _e('Any number', 'google-places-directory'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>size</code></td>
+                    <td><?php _e('Image size to display', 'google-places-directory'); ?></td>
+                    <td><code>medium</code></td>
+                    <td><code>thumbnail</code>, <code>medium</code>, <code>large</code>, <code>full</code></td>
+                </tr>
+                <tr>
+                    <td><code>show_caption</code></td>
+                    <td><?php _e('Whether to display photo captions', 'google-places-directory'); ?></td>
                     <td><code>false</code></td>
                     <td><code>true</code>, <code>false</code></td>
                 </tr>
                 <tr>
-                    <td><code>random</code></td>
-                    <td><?php _e('Randomize photo order', 'google-places-directory'); ?></td>
-                    <td><code>false</code></td>
-                    <td><code>true</code>, <code>false</code></td>
+                    <td><code>class</code></td>
+                    <td><?php _e('Custom CSS class to add to the gallery wrapper', 'google-places-directory'); ?></td>
+                    <td><code>''</code></td>
+                    <td><?php _e('Any valid CSS class name', 'google-places-directory'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>max_width</code></td>
+                    <td><?php _e('Maximum width for column layout', 'google-places-directory'); ?></td>
+                    <td><code>800px</code></td>
+                    <td><?php _e('Any valid CSS width value', 'google-places-directory'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>spacing</code></td>
+                    <td><?php _e('Space between photos in column layout', 'google-places-directory'); ?></td>
+                    <td><code>20px</code></td>
+                    <td><?php _e('Any valid CSS measurement', 'google-places-directory'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>alignment</code></td>
+                    <td><?php _e('Horizontal alignment of column layout', 'google-places-directory'); ?></td>
+                    <td><code>center</code></td>
+                    <td><code>left</code>, <code>center</code>, <code>right</code></td>
                 </tr>
             </tbody>
         </table>
         
         <h4><?php esc_html_e('Examples', 'google-places-directory'); ?></h4>
         <div class="shortcode-examples">
-            <p><strong><?php _e('Basic Usage:', 'google-places-directory'); ?></strong></p>
-            <pre><code>[gpd-photos id="123"]</code></pre>
+            <p><strong><?php _e('Basic Grid Layout:', 'google-places-directory'); ?></strong></p>
+            <pre><code>[gpd-photos id="123" layout="grid" columns="3" limit="9"]</code></pre>
             
-            <p><strong><?php _e('Photo Carousel:', 'google-places-directory'); ?></strong></p>
-            <pre><code>[gpd-photos id="123" layout="carousel" count="12" size="large" caption="true"]</code></pre>
+            <p><strong><?php _e('Masonry Layout with Captions:', 'google-places-directory'); ?></strong></p>
+            <pre><code>[gpd-photos id="123" layout="masonry" columns="4" show_caption="true"]</code></pre>
             
-            <p><strong><?php _e('Two-Column Masonry Gallery:', 'google-places-directory'); ?></strong></p>
-            <pre><code>[gpd-photos id="123" layout="masonry" columns="2" count="8"]</code></pre>
+            <p><strong><?php _e('Interactive Carousel:', 'google-places-directory'); ?></strong></p>
+            <pre><code>[gpd-photos id="123" layout="carousel" size="large" show_caption="true"]</code></pre>
+            
+            <p><strong><?php _e('Single Column Display:', 'google-places-directory'); ?></strong></p>
+            <pre><code>[gpd-photos id="123" layout="column" max_width="600px" spacing="15px" alignment="center"]</code></pre>
+        </div>
+
+        <h4><?php esc_html_e('Features', 'google-places-directory'); ?></h4>
+        <ul class="shortcode-features">
+            <li><?php _e('<strong>Automatic Lightbox:</strong> Full-size photo viewing with lightbox integration', 'google-places-directory'); ?></li>
+            <li><?php _e('<strong>Lazy Loading:</strong> Images load as they come into view for better performance', 'google-places-directory'); ?></li>
+            <li><?php _e('<strong>Responsive Design:</strong> Galleries adapt to different screen sizes', 'google-places-directory'); ?></li>
+            <li><?php _e('<strong>Caption Support:</strong> Optional captions can be displayed with photos', 'google-places-directory'); ?></li>
+        </ul>
+        
+        <h4><?php esc_html_e('Best Practices', 'google-places-directory'); ?></h4>
+        <div class="shortcode-tips">
+            <ul>
+                <li><?php _e('<strong>Image Sizes:</strong> Use "thumbnail" or "medium" for grid layouts with many photos, "large" for featured photos or carousels.', 'google-places-directory'); ?></li>
+                <li><?php _e('<strong>Performance:</strong> Use the limit parameter when displaying many photos and choose appropriate image sizes.', 'google-places-directory'); ?></li>
+                <li><?php _e('<strong>Layout Selection:</strong> Use grid for uniform displays, masonry for preserving proportions, carousel for slideshows, column for simple vertical displays.', 'google-places-directory'); ?></li>
+                <li><?php _e('<strong>Accessibility:</strong> Photo titles are automatically used as alt text. Enable captions when additional context is helpful.', 'google-places-directory'); ?></li>
+            </ul>
         </div>
     </div>
 

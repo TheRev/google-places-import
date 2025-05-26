@@ -14,14 +14,16 @@ class GPD_Docs {
     private $tabs = array();
     private $registered_plugins = array();
     private $sections = array();
-
+    
     public static function instance() {
         if (self::$instance === null) {
             self::$instance = new self();
             self::$instance->init_hooks();
         }
         return self::$instance;
-    }    private function init_hooks() {
+    }
+    
+    private function init_hooks() {
         add_action('admin_menu', array($this, 'add_docs_pages'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_styles'));
         
@@ -179,10 +181,10 @@ class GPD_Docs {
         </div>
         <?php
     }
-    
-    /**
+      /**
      * Render general documentation
-     */    private function render_general_docs() {
+     */
+    private function render_general_docs() {
         ?>
         <div class="gpd-docs-section">
             <h2><?php esc_html_e('Getting Started', 'google-places-directory'); ?></h2>
@@ -292,25 +294,150 @@ class GPD_Docs {
         </div>
         <?php
     }
-    
-    /**
+      /**
      * Render photos documentation
      */
     private function render_photos_docs() {
         ?>
         <div class="gpd-docs-section">
             <h2><?php esc_html_e('Business Photos', 'google-places-directory'); ?></h2>
-            <p><?php _e('The <code>[gpd-photos]</code> shortcode allows you to display photos for a business.', 'google-places-directory'); ?></p>
-            
-            <h3><?php esc_html_e('Layouts', 'google-places-directory'); ?></h3>
+            <p><?php _e('The <code>[gpd-photos]</code> shortcode allows you to display a customizable gallery of business photos imported from Google Places.', 'google-places-directory'); ?></p>
+
+            <h3><?php esc_html_e('Basic Usage', 'google-places-directory'); ?></h3>
+            <p><?php _e('Display photos for the current business:', 'google-places-directory'); ?></p>
+            <div class="gpd-shortcode-example">
+                [gpd-photos]
+            </div>
+
+            <p><?php _e('Display photos for a specific business:', 'google-places-directory'); ?></p>
+            <div class="gpd-shortcode-example">
+                [gpd-photos id="123"]
+            </div>
+
+            <h3><?php esc_html_e('Layout Options', 'google-places-directory'); ?></h3>
             <p><?php _e('The photos shortcode supports multiple layout options:', 'google-places-directory'); ?></p>
             
             <ul>
-                <li><strong><?php esc_html_e('Grid Layout:', 'google-places-directory'); ?></strong> <?php _e('Displays photos in a responsive grid with even spacing (default).', 'google-places-directory'); ?></li>
-                <li><strong><?php esc_html_e('Masonry Layout:', 'google-places-directory'); ?></strong> <?php _e('Creates a Pinterest-style layout that preserves image aspect ratios.', 'google-places-directory'); ?></li>
-                <li><strong><?php esc_html_e('Carousel Layout:', 'google-places-directory'); ?></strong> <?php _e('Shows photos in a scrollable slideshow with navigation controls.', 'google-places-directory'); ?></li>
-                <li><strong><?php esc_html_e('Column Layout:', 'google-places-directory'); ?></strong> <?php _e('Displays photos in a single vertical column with customizable width.', 'google-places-directory'); ?></li>
+                <li>
+                    <strong><?php esc_html_e('Grid Layout:', 'google-places-directory'); ?></strong> 
+                    <?php _e('Displays photos in a responsive grid with even spacing (default).', 'google-places-directory'); ?>
+                    <div class="gpd-shortcode-example">
+                        [gpd-photos layout="grid" columns="3"]
+                    </div>
+                </li>
+                <li>
+                    <strong><?php esc_html_e('Masonry Layout:', 'google-places-directory'); ?></strong> 
+                    <?php _e('Creates a Pinterest-style layout that preserves image aspect ratios.', 'google-places-directory'); ?>
+                    <div class="gpd-shortcode-example">
+                        [gpd-photos layout="masonry" columns="4"]
+                    </div>
+                </li>
+                <li>
+                    <strong><?php esc_html_e('Carousel Layout:', 'google-places-directory'); ?></strong> 
+                    <?php _e('Shows photos in a scrollable slideshow with navigation controls.', 'google-places-directory'); ?>
+                    <div class="gpd-shortcode-example">
+                        [gpd-photos layout="carousel"]
+                    </div>
+                </li>
+                <li>
+                    <strong><?php esc_html_e('Column Layout:', 'google-places-directory'); ?></strong> 
+                    <?php _e('Displays photos in a single vertical column with customizable width.', 'google-places-directory'); ?>
+                    <div class="gpd-shortcode-example">
+                        [gpd-photos layout="column" max_width="600px"]
+                    </div>
+                </li>
             </ul>
+
+            <h3><?php esc_html_e('All Available Parameters', 'google-places-directory'); ?></h3>
+            <table class="gpd-docs-table">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e('Parameter', 'google-places-directory'); ?></th>
+                        <th><?php esc_html_e('Default', 'google-places-directory'); ?></th>
+                        <th><?php esc_html_e('Description', 'google-places-directory'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>id</code></td>
+                        <td>0 (current post)</td>
+                        <td><?php _e('The business post ID. Defaults to current post if not specified.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>layout</code></td>
+                        <td>grid</td>
+                        <td><?php _e('Gallery layout type: grid, masonry, carousel, or column.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>columns</code></td>
+                        <td>3</td>
+                        <td><?php _e('Number of columns for grid and masonry layouts.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>limit</code></td>
+                        <td>0 (all)</td>
+                        <td><?php _e('Maximum number of photos to display. Use 0 for all photos.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>size</code></td>
+                        <td>medium</td>
+                        <td><?php _e('Image size: thumbnail, medium, large, or full.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>show_caption</code></td>
+                        <td>false</td>
+                        <td><?php _e('Whether to display photo captions.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>class</code></td>
+                        <td></td>
+                        <td><?php _e('Additional CSS classes for the gallery container.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>max_width</code></td>
+                        <td>800px</td>
+                        <td><?php _e('Maximum width for column layout.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>spacing</code></td>
+                        <td>20px</td>
+                        <td><?php _e('Spacing between photos in column layout.', 'google-places-directory'); ?></td>
+                    </tr>
+                    <tr>
+                        <td><code>alignment</code></td>
+                        <td>center</td>
+                        <td><?php _e('Alignment for column layout: left, center, or right.', 'google-places-directory'); ?></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3><?php esc_html_e('Examples', 'google-places-directory'); ?></h3>
+            <p><?php _e('Grid layout with 4 columns and captions:', 'google-places-directory'); ?></p>
+            <div class="gpd-shortcode-example">
+                [gpd-photos layout="grid" columns="4" show_caption="true"]
+            </div>
+
+            <p><?php _e('Masonry layout with limited photos:', 'google-places-directory'); ?></p>
+            <div class="gpd-shortcode-example">
+                [gpd-photos layout="masonry" columns="3" limit="6"]
+            </div>
+
+            <p><?php _e('Carousel with custom class:', 'google-places-directory'); ?></p>
+            <div class="gpd-shortcode-example">
+                [gpd-photos layout="carousel" class="my-custom-gallery"]
+            </div>
+
+            <p><?php _e('Column layout with custom width and alignment:', 'google-places-directory'); ?></p>
+            <div class="gpd-shortcode-example">
+                [gpd-photos layout="column" max_width="600px" alignment="left"]
+            </div>
+
+            <div class="gpd-notice gpd-notice-info">
+                <p>
+                    <strong><?php esc_html_e('Note:', 'google-places-directory'); ?></strong>
+                    <?php _e('All photos are automatically displayed in a lightbox when clicked, allowing users to view them in full size.', 'google-places-directory'); ?>
+                </p>
+            </div>
         </div>
         <?php
     }
@@ -526,8 +653,7 @@ class GPD_Docs {
      */
     private function calculate_api_costs($daily_counts) {
         $request_counts = $daily_counts;
-        // Remove the date key if present
-        unset($request_counts['date']);
+        unset($request_counts['date']); // Remove the date key if present
         
         $costs = array(
             'text_search' => ($request_counts['text_search'] / 1000) * 5, // $5 per 1000 requests
@@ -538,71 +664,20 @@ class GPD_Docs {
         $costs['total'] = array_sum($costs);
         return $costs;
     }
-      /**
+    
+    /**
      * Render API documentation
-     */    private function render_api_docs() {
+     */
+    private function render_api_docs() {
+        // Get API usage data if available
         $data = $this->get_api_usage_data();
         $costs = $this->calculate_api_costs($data['daily_counts']);
-        $api_usage = GPD_API_Usage::instance();
-
-        // Load the comprehensive API integration guide
-        $api_guide_file = GPD_PLUGIN_DIR . 'includes/docs/api-integration-guide.php';
-        if (file_exists($api_guide_file)) {
-            include $api_guide_file;
-        } else {
-            // Fallback if the file doesn't exist
-            ?>
-            <div class="gpd-docs-section">
-                <h2><?php esc_html_e('Google Places API Integration Guide', 'google-places-directory'); ?></h2>
-                
-                <h3><?php esc_html_e('Setting Up Your Google API Key', 'google-places-directory'); ?></h3>
-                <p><?php _e('To use Google Places Directory, you need to obtain an API key from Google Cloud Platform. Follow these steps:', 'google-places-directory'); ?></p>
-                
-                <ol>
-                    <li>
-                        <strong><?php _e('Create a Google Cloud Project', 'google-places-directory'); ?></strong>
-                        <p><?php _e('Visit the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> and create a new project (or select an existing one).', 'google-places-directory'); ?></p>
-                    </li>
-                    <li>
-                        <strong><?php _e('Enable Required APIs', 'google-places-directory'); ?></strong>
-                        <p><?php _e('In your Google Cloud project, go to "APIs & Services" → "Library" and enable the following APIs:', 'google-places-directory'); ?></p>
-                        <ul>
-                            <li><?php _e('Places API - Required for business search and details', 'google-places-directory'); ?></li>
-                            <li><?php _e('Maps JavaScript API - Required for maps and location features', 'google-places-directory'); ?></li>
-                            <li><?php _e('Geocoding API - (Optional) For address search features', 'google-places-directory'); ?></li>
-                        </ul>
-                    </li>
-                <li>
-                    <strong><?php _e('Create API Key', 'google-places-directory'); ?></strong>
-                    <p><?php _e('Go to "APIs & Services" → "Credentials" and click "Create Credentials" → "API Key".', 'google-places-directory'); ?></p>
-                </li>
-                <li>
-                    <strong><?php _e('Set API Key Restrictions (Recommended)', 'google-places-directory'); ?></strong>
-                    <p><?php _e('For security, restrict your API key:', 'google-places-directory'); ?></p>
-                    <ul>
-                        <li><?php _e('<strong>HTTP referrers:</strong> Add your website domain', 'google-places-directory'); ?></li>
-                        <li><?php _e('<strong>API restrictions:</strong> Restrict to only the APIs you enabled', 'google-places-directory'); ?></li>
-                    </ul>
-                </li>
-                <li>
-                    <strong><?php _e('Set Up Billing (Required)', 'google-places-directory'); ?></strong>
-                    <p><?php _e('Google Places API requires billing to be enabled. Add a payment method to your Google Cloud account.', 'google-places-directory'); ?></p>
-                </li>
-                <li>
-                    <strong><?php _e('Enter API Key in Plugin Settings', 'google-places-directory'); ?></strong>
-                    <p><?php _e('Copy your API key and enter it in the plugin\'s Settings page (Business → Settings).', 'google-places-directory'); ?></p>
-                </li>
-            </ol>
-
-            <div class="gpd-notice gpd-notice-warning">
-                <p>
-                    <strong><?php _e('Important Security Notice:', 'google-places-directory'); ?></strong>
-                    <?php _e('Always apply restrictions to your API key to prevent unauthorized use. If your key is used without restrictions, unauthorized parties could use it and incur charges to your Google Cloud billing account.', 'google-places-directory'); ?>
-                </p>
-            </div>
-
-            <h3><?php esc_html_e('Places API (New) Information', 'google-places-directory'); ?></h3>
-            <p><?php _e('This plugin uses Google\'s new Places API, which was updated in May 2025.', 'google-places-directory'); ?></p>
+        ?>
+        <div class="gpd-docs-section">
+            <h2><?php esc_html_e('API Documentation', 'google-places-directory'); ?></h2>
+            
+            <!-- Rest of the render_api_docs content -->
+            <?php include_once(GPD_PLUGIN_DIR . 'includes/docs/api-integration-guide.php'); ?>
             
             <div class="gpd-api-stats" style="background: #f8f9fa; padding: 20px; margin: 20px 0; border: 1px solid #ddd; border-radius: 4px;">
                 <h3><?php esc_html_e('Today\'s API Usage', 'google-places-directory'); ?></h3>
@@ -634,7 +709,6 @@ class GPD_Docs {
                             <td><strong><?php esc_html_e('Total', 'google-places-directory'); ?></strong></td>
                             <td><strong><?php 
                                 $request_counts = $data['daily_counts'];
-                                // Remove the date key if present
                                 unset($request_counts['date']); 
                                 echo number_format(array_sum($request_counts)); 
                             ?></strong></td>
@@ -668,7 +742,7 @@ class GPD_Docs {
             </ul>
             
             <h3><?php esc_html_e('API Usage and Billing', 'google-places-directory'); ?></h3>
-            <p><?php _e('The Places API is a billing-required API with the following pricing structure:', 'google-places-directory'); ?></p>
+            <p><?php _e('The Places API is a billing-required API with the following pricing structure:', 'google-places-directory'); ?></p>            
             <ul>
                 <li><?php _e('<strong>Text Search</strong>: $5 per 1,000 requests', 'google-places-directory'); ?></li>
                 <li><?php _e('<strong>Place Details</strong>: $4 per 1,000 requests', 'google-places-directory'); ?></li>
@@ -677,7 +751,5 @@ class GPD_Docs {
         </div>
         <?php
     }
-}
 
-// Initialize the docs
-GPD_Docs::instance();
+} // end of GPD_Docs class
