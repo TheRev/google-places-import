@@ -1,7 +1,19 @@
 <?php
 /**
  * Google Places Directory Developer Guide
- * This file contains documentation for developers integrating with the plugin
+ * This file contains comprehensive documentation for developers integrating with the plugin
+ * 
+ * Version: 2.3.0
+ * Updated: May 2025
+ */
+
+/**
+ * This guide provides extensive documentation for developers who want to:
+ * - Create add-ons for Google Places Directory
+ * - Customize the plugin's functionality
+ * - Integrate with the plugin's data and features
+ * - Extend the plugin with new shortcodes and features
+ * - Access Google Places API data efficiently
  */
 
 /**
@@ -29,6 +41,40 @@ function gpd_example_basic_integration() {
 }
 
 /**
+ * Key Developer Features Available
+ * 
+ * 1. Filters and Actions - Modify plugin behavior without editing core files
+ * 2. Custom Post Type Access - Extend the business post type with custom fields and taxonomies
+ * 3. API Data Integration - Access Google Places data through the plugin's API wrapper
+ * 4. Shortcode Extensions - Create custom shortcodes that integrate with the plugin
+ * 5. Template Customization - Override templates for custom display of business data
+ */
+
+/**
+ * Available Hooks and Filters
+ * 
+ * These hooks allow you to modify the plugin's behavior without editing core files.
+ */
+function gpd_document_available_hooks() {
+    return array(
+        // Data Filters
+        'gpd_business_data' => 'Modify imported business data before saving',
+        'gpd_display_business' => 'Filter business data before display in templates',
+        'gpd_before_api_request' => 'Modify API request parameters',
+        
+        // Display Filters
+        'gpd_map_options' => 'Customize Google Map display options',
+        'gpd_search_results' => 'Filter business search results',
+        'gpd_business_fields' => 'Modify available fields for display',
+        
+        // Action Hooks
+        'gpd_after_business_import' => 'Runs after a business is imported',
+        'gpd_before_places_api_request' => 'Runs before making a Places API request',
+        'gpd_after_places_api_request' => 'Runs after receiving Places API response'
+    );
+}
+
+/**
  * Advanced Integration Example
  * Shows how to integrate with multiple tabs and dynamic content
  */
@@ -39,7 +85,9 @@ function gpd_example_advanced_integration() {
     $docs->register_plugin('gpd-advanced-features', array(
         'title'       => 'GPD Advanced Features',
         'version'     => '2.0.0',
-        'description' => 'Advanced features for Google Places Directory',
+        'description' => 'Advanced features for Google Places Directory including custom photo management, enhanced search capabilities, and business data extensions',
+        'author'      => 'Your Company Name',
+        'author_url'  => 'https://example.com',
         'path'        => plugin_dir_path(__FILE__),
         'sections'    => array(
             // Add to existing Photos tab
@@ -73,6 +121,55 @@ function gpd_example_advanced_integration() {
 /**
  * Example of rendering dynamic documentation content
  */
+/**
+ * Real-World Integration Examples
+ * 
+ * This section contains comprehensive examples of extending Google Places Directory
+ */
+function my_gpd_show_integration_examples() {
+    ?>
+    <div class="gpd-docs-content gpd-developer-examples">
+        <h3>Complete Integration Examples</h3>
+        
+        <ul class="gpd-example-nav">
+            <li><a href="#custom-shortcodes">Creating Custom Shortcodes</a></li>
+            <li><a href="#custom-fields">Adding Custom Fields</a></li>
+            <li><a href="#custom-importer">Extending the Importer</a></li>
+            <li><a href="#custom-templates">Creating Custom Templates</a></li>
+        </ul>
+        
+        <div id="custom-shortcodes" class="gpd-example-section">
+            <h4>Example 1: Creating a Custom Shortcode</h4>
+            <p>This example shows how to create a custom shortcode that displays businesses near a specific location:</p>
+            <pre><?php echo htmlspecialchars(file_get_contents(__DIR__ . '/sections/custom-shortcode-example.php')); ?></pre>
+        </div>
+        
+        <div id="custom-fields" class="gpd-example-section">
+            <h4>Example 2: Adding Custom Fields</h4>
+            <p>This example demonstrates how to add custom fields to business posts and integrate them with the Google Places API import process:</p>
+            <pre><?php echo htmlspecialchars(file_get_contents(__DIR__ . '/sections/custom-fields-example.php')); ?></pre>
+        </div>
+        
+        <div id="custom-importer" class="gpd-example-section">
+            <h4>Example 3: Extending the Importer</h4>
+            <p>This example shows how to add a custom import source to integrate with external business directories:</p>
+            <pre><?php echo htmlspecialchars(file_get_contents(__DIR__ . '/sections/custom-importer-example.php')); ?></pre>
+        </div>
+        
+        <div id="custom-templates" class="gpd-example-section">
+            <h4>Example 4: Creating Custom Templates</h4>
+            <p>To create custom templates for businesses, add your template files to your theme in a folder named <code>gpd-templates</code>. The plugin will automatically look for these template files:</p>
+            <ul>
+                <li><code>single-business.php</code> - Single business display</li>
+                <li><code>archive-business.php</code> - Business directory archive</li>
+                <li><code>taxonomy-business_category.php</code> - Category archive</li>
+                <li><code>taxonomy-business_region.php</code> - Region archive</li>
+            </ul>
+        </div>
+    </div>
+    <?php
+}
+
 function gpd_render_advanced_photo_docs() {
     ?>
     <div class="gpd-docs-content">
