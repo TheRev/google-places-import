@@ -6,7 +6,7 @@
  * Author: TheRev
  * Text Domain: google-places-directory
  * Domain Path: /languages
- * 
+ *
  * Updated for Google Places API v1 in May 2025
  */
 
@@ -21,7 +21,7 @@ define( 'GPD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 /**
  * Load a class file from the includes directory
- * 
+ *
  * @param string $class_name The name of the class to load
  * @return bool True if the class file was loaded successfully, false otherwise
  */
@@ -29,12 +29,12 @@ function gpd_load_class($class_name) {
     // Normalize directory separators for cross-platform compatibility
     $includes_dir = rtrim(GPD_PLUGIN_DIR, '/\\') . DIRECTORY_SEPARATOR . 'includes' . DIRECTORY_SEPARATOR;
     $file = $includes_dir . 'class-' . strtolower(str_replace('_', '-', $class_name)) . '.php';
-    
+
     // Also load any initialization file if it exists
     $init_file = $includes_dir . 'init-' . strtolower(str_replace('_', '-', $class_name)) . '.php';
-    
+
     $class_loaded = false;
-    
+
     // Load the class file
     if (file_exists($file) && is_readable($file)) {
         require_once $file;
@@ -51,7 +51,7 @@ function gpd_load_class($class_name) {
     if (file_exists($init_file) && is_readable($init_file)) {
         require_once $init_file;
     }
-    
+
     return $class_loaded;
 }
 
@@ -97,7 +97,7 @@ function gpd_init() {
     // Enqueue the usage graph JavaScript if we're on the settings page
     add_action('admin_enqueue_scripts', function($hook) {
         if ('business_page_gpd-settings' === $hook) {
-            wp_enqueue_script('gpd-usage-graph', 
+            wp_enqueue_script('gpd-usage-graph',
                 GPD_PLUGIN_URL . 'assets/js/gpd-usage-graph.js',
                 array('jquery', 'wp-element'),
                 GPD_VERSION,
@@ -111,7 +111,7 @@ function gpd_init() {
 function gpd_load_textdomain() {
     // Load main plugin textdomain
     load_plugin_textdomain('google-places-directory', false, dirname(plugin_basename(__FILE__)) . '/languages');
-    
+
     // Load any addon textdomains used in docs
     load_plugin_textdomain('gpd-advanced-features', false, dirname(plugin_basename(__FILE__)) . '/languages');
 }
@@ -134,7 +134,7 @@ function gpd_check_activation_tasks() {
     if (get_option('gpd_just_activated')) {
         // Delete the flag
         delete_option('gpd_just_activated');
-        
+
         // Initialize API Usage now that translations are properly loaded
         gpd_load_class('GPD_API_Usage');
         if (class_exists('GPD_API_Usage')) {
@@ -150,7 +150,7 @@ function gpd_check_flush_rewrite_rules() {
     if (get_option('gpd_flush_rewrite_rules')) {
         // Delete the flag
         delete_option('gpd_flush_rewrite_rules');
-        
+
         // Flush rewrite rules to ensure business URLs work
         flush_rewrite_rules();
     }
@@ -160,27 +160,21 @@ function gpd_check_flush_rewrite_rules() {
 register_activation_hook( __FILE__, 'gpd_activate_plugin' );
 
 function gpd_activate_plugin() {
-    // Load translation domains during activation to prevent JIT loading errors
+    // Load translation domains during activation. This is good practice.
     $domain_path = dirname(plugin_basename(__FILE__)) . '/languages';
     load_plugin_textdomain('google-places-directory', false, $domain_path);
     load_plugin_textdomain('gpd-advanced-features', false, $domain_path);
-    
-    // Register the business post type temporarily for activation
-    $args = array(
-        'public' => true,
-        'has_archive' => false,
-        'supports' => array('title', 'editor', 'thumbnail', 'custom-fields'),
-        'show_in_rest' => true,
-        'rewrite' => array('slug' => 'business'),
-    );
-    register_post_type('business', $args);
-    
-    // Clear permalinks immediately
-    flush_rewrite_rules();
-    
-    // Set flags for post-activation tasks
+
+    // Do NOT register post type here. GPD_CPT handles it on 'init'.
+    // Do NOT call flush_rewrite_rules() here. It's an anti-pattern.
+    // Instead, set a flag to flush rules on the next 'init' action,
+    // after the CPT has been properly registered.
+
+    // Set flags for post-activation tasks.
+    // gpd_check_flush_rewrite_rules (hooked to init at priority 20) will handle flushing
+    // after GPD_CPT registers post types (hooked to init at priority 10).
     update_option('gpd_flush_rewrite_rules', true);
-    update_option('gpd_just_activated', true);
+    update_option('gpd_just_activated', true); // For other activation tasks like API setup
 }
 
 /**
